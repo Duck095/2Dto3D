@@ -93,6 +93,9 @@ public class AiGenerationJob {
     @Column(name = "processing_lease_until")
     private Instant processingLeaseUntil;
 
+    @Column(name = "next_attempt_at")
+    private Instant nextAttemptAt;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

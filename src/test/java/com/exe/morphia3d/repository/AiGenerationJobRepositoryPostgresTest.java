@@ -15,8 +15,11 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 
 import java.util.UUID;
+import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -45,6 +48,9 @@ class AiGenerationJobRepositoryPostgresTest {
     @Autowired
     private UserRepository users;
 
+    @PersistenceContext
+    private EntityManager entityManager;
+
     @Test
     void jobReadsAreScopedToOwnerAndHistoryIsStableNewestFirst() throws InterruptedException {
         User firstOwner = users.saveAndFlush(user("first"));
@@ -65,6 +71,21 @@ class AiGenerationJobRepositoryPostgresTest {
                 .containsExactly(newer.getId(), older.getId());
         assertThat(jobs.findByUser_IdAndIdempotencyKey(firstOwner.getId(), "older-key"))
                 .contains(older);
+    }
+
+    @Test
+    void atomicClaimDoesNotClaimAnActiveJobTwice() {
+        User owner = users.saveAndFlush(user("claim"));
+        AiGenerationJob pending = jobs.saveAndFlush(job(owner, "claim-key"));
+        Instant now = Instant.now();
+        assertThat(jobs.claimNextPending("worker-one", now.plusSeconds(30), now, 2)).isEqualTo(1);
+
+        entityManager.flush();
+        entityManager.clear();
+        AiGenerationJob claimed = jobs.findById(pending.getId()).orElseThrow();
+        assertThat(claimed.getStatus()).isEqualTo(AiGenerationStatus.PROCESSING);
+        assertThat(claimed.getAttemptCount()).isEqualTo(1);
+        assertThat(jobs.claimNextPending("worker-two", now.plusSeconds(30), now, 2)).isZero();
     }
 
     private User user(String suffix) {
