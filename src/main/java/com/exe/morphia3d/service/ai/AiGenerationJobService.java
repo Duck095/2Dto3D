@@ -25,6 +25,7 @@ import java.util.HexFormat;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.io.InputStream;
 
 @Service
 public class AiGenerationJobService {
@@ -112,7 +113,58 @@ public class AiGenerationJobService {
     }
 
     public AiGenerationJobResponse retry(UUID id, UserPrincipal principal, String idempotencyKey) {
-        throw new AiGenerationException("AI_RETRY_NOT_AVAILABLE");
+        Integer ownerId = requireOwner(principal);
+        idempotencyKey = idempotencyKey == null ? null : idempotencyKey.trim();
+        if (idempotencyKey == null || idempotencyKey.isBlank() || idempotencyKey.length() > 128) {
+            throw new AiGenerationException("AI_INVALID_IDEMPOTENCY_KEY");
+        }
+        AiGenerationJob source = jobs.findByIdAndUser_Id(id, ownerId)
+                .orElseThrow(() -> new AiGenerationException("AI_GENERATION_NOT_FOUND"));
+        if (source.getStatus() != AiGenerationStatus.FAILED) {
+            throw new AiGenerationException("AI_RETRY_NOT_ALLOWED");
+        }
+        requireReady();
+        synchronized (quotaLock(ownerId)) {
+            AiGenerationJob existing = jobs.findByUser_IdAndIdempotencyKey(ownerId, idempotencyKey).orElse(null);
+            if (existing != null) {
+                if (!existing.getRequestHash().equals(source.getRequestHash())) {
+                    throw new AiGenerationException("AI_IDEMPOTENCY_CONFLICT");
+                }
+                return toResponse(existing);
+            }
+            checkAndRecordRateLimit(ownerId);
+        }
+        AiGenerationJob retry = AiGenerationJob.builder()
+                .id(UUID.randomUUID())
+                .user(source.getUser())
+                .retryOf(source)
+                .idempotencyKey(idempotencyKey)
+                .requestHash(source.getRequestHash())
+                .prompt(source.getPrompt())
+                .style(source.getStyle())
+                .quality(source.getQuality())
+                .inputMode(source.getInputMode())
+                .inputArtifactKey(source.getInputArtifactKey())
+                .status(AiGenerationStatus.PENDING)
+                .attemptCount(0)
+                .build();
+        try {
+            return toResponse(jobs.saveAndFlush(retry));
+        } catch (DataIntegrityViolationException concurrentReplay) {
+            AiGenerationJob existing = jobs.findByUser_IdAndIdempotencyKey(ownerId, idempotencyKey).orElse(null);
+            if (existing != null && existing.getRequestHash().equals(source.getRequestHash())) return toResponse(existing);
+            if (existing != null) throw new AiGenerationException("AI_IDEMPOTENCY_CONFLICT");
+            throw concurrentReplay;
+        }
+    }
+
+    public InputStream openResultForOwner(UUID id, Integer ownerId) {
+        AiGenerationJob job = jobs.findByIdAndUser_Id(id, ownerId)
+                .orElseThrow(() -> new AiGenerationException("AI_GENERATION_NOT_FOUND"));
+        if (job.getStatus() != AiGenerationStatus.COMPLETED || job.getResultArtifactKey() == null) {
+            throw new AiGenerationException("AI_RESULT_NOT_READY");
+        }
+        return artifacts.openResult(job.getResultArtifactKey());
     }
 
     AiGenerationJobResponse toResponse(AiGenerationJob job) {

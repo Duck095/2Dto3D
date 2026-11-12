@@ -19,6 +19,7 @@ public interface AiGenerationJobRepository extends JpaRepository<AiGenerationJob
     @EntityGraph(attributePaths = {"retryOf", "resultModel"})
     Optional<AiGenerationJob> findByIdAndUser_Id(UUID id, Integer userId);
 
+    @EntityGraph(attributePaths = {"retryOf", "resultModel"})
     Page<AiGenerationJob> findByUser_IdOrderByCreatedAtDescIdDesc(Integer userId, Pageable pageable);
 
     Optional<AiGenerationJob> findByUser_IdAndIdempotencyKey(Integer userId, String idempotencyKey);
