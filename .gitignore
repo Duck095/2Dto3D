@@ -1,0 +1,43 @@
+# Local QA evidence and disposable runs
+**/.qa-temp/
+**/.qa-evidence/
+**/staff-e2e-local-temp/
+
+# Local environment files and credentials
+**/.env
+**/.env.*
+!**/.env.example
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/secrets/
+**/credentials/
+**/secrets.*
+**/credentials.*
+**/*.secret
+
+# Build, test, and package output
+**/node_modules/
+**/dist/
+**/target/
+**/.mvn-target/
+**/coverage/
+**/playwright-report/
+**/test-results/
+**/uploads/
+
+# Logs and local tool state
+*.log
+*.dump
+*.bak
+*.backup
+*.sqlite
+*.db
+**/.run/
+**/.vite/
+**/.playwright-cli/
+**/replay_pid*.log
+**/hs_err_pid*.log
+**/.DS_Store
+**/Thumbs.db
