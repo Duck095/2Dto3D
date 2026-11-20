@@ -1,0 +1,8 @@
+# Exact Gitleaks fingerprints for reviewed property-string test fixtures.
+# SecretConfigurationHardeningTest constructs synthetic configuration strings; no credential values are embedded.
+a080a5edafb929f55366ef0ef23409423f7597f7:src/test/java/com/exe/morphia3d/security/SecretConfigurationHardeningTest.java:generic-api-key:38
+a080a5edafb929f55366ef0ef23409423f7597f7:src/test/java/com/exe/morphia3d/security/SecretConfigurationHardeningTest.java:generic-api-key:69
+# Exact worktree fingerprint for the reviewed synthetic QA Cloudinary property fixture.
+2Dto3D_BE/src/test/java/com/exe/morphia3d/feature/QaCloudinaryPropertiesImportTest.java:generic-api-key:23
+2Dto3D_BE/src/test/java/com/exe/morphia3d/security/SecretConfigurationHardeningTest.java:generic-api-key:38
+2Dto3D_BE/src/test/java/com/exe/morphia3d/security/SecretConfigurationHardeningTest.java:generic-api-key:69

@@ -58,14 +58,14 @@ jobs:
           npx playwright install msedge
 
       - name: Create isolated PostgreSQL QA database
-        env:
-          GITHUB_RUN_ID: ${{ github.run_id }}
-          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
           set -euo pipefail
           image='postgres@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea'
           db_password="$(openssl rand -hex 32)"
           jwt_secret="$(openssl rand -hex 32)"
+          payos_encryption_key="$(openssl rand -base64 32)"
+          migrator_password="$(openssl rand -hex 32)"
+          runtime_password="$(openssl rand -hex 32)"
           qa_admin_email="e2e-admin-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}@example.test"
           qa_admin_password="$(openssl rand -hex 32)"
           qa_staff_email="e2e-staff-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}@example.test"
@@ -76,7 +76,7 @@ jobs:
           qa_user_password="$(openssl rand -hex 32)"
           qa_employee_number="E2E-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
-          for value in "$db_password" "$jwt_secret" "$qa_admin_email" "$qa_admin_password" \
+          for value in "$db_password" "$jwt_secret" "$payos_encryption_key" "$migrator_password" "$runtime_password" "$qa_admin_email" "$qa_admin_password" \
             "$qa_staff_email" "$qa_staff_password" "$qa_create_staff_email" "$qa_create_staff_password" \
             "$qa_user_email" "$qa_user_password"; do
             echo "::add-mask::$value"
@@ -95,8 +95,11 @@ jobs:
           {
             echo "QA_DB_PASSWORD=$db_password"
             echo "DB_PASSWORD=$db_password"
+          echo "MIGRATOR_PASSWORD=$migrator_password"
+          echo "RUNTIME_PASSWORD=$runtime_password"
             echo 'DB_URL=jdbc:postgresql://127.0.0.1:5432/morphia3d'
             echo "JWT_SECRET=$jwt_secret"
+            echo "PAYOS_ENCRYPTION_KEY=$payos_encryption_key"
             echo "QA_ADMIN_EMAIL=$qa_admin_email"
             echo "QA_ADMIN_PASSWORD=$qa_admin_password"
             echo "QA_STAFF_EMAIL=$qa_staff_email"
@@ -128,20 +131,49 @@ jobs:
             fi
             sleep 2
           done
-          echo 'PostgreSQL QA database did not become healthy.'
+          echo "PostgreSQL QA database did not become healthy after ${attempt} attempts."
           exit 1
 
       - name: Verify Maven Wrapper 3.9.9
         working-directory: 2Dto3D_BE
         run: grep -Fx 'distributionUrl=https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.9/apache-maven-3.9.9-bin.zip' .mvn/wrapper/maven-wrapper.properties
 
-      - name: Apply Flyway V1, V2 and V3 migrations
+      - name: Provision disposable PostgreSQL migration and runtime roles
+        run: |
+          set -euo pipefail
+          docker exec -i staff-e2e-postgres psql -X -v ON_ERROR_STOP=1 -U postgres -d morphia3d \
+            -v migrator_password="$MIGRATOR_PASSWORD" -v runtime_password="$RUNTIME_PASSWORD" <<'SQL'
+          CREATE ROLE admin3d_owner NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+          CREATE ROLE admin3d_lock_owner NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+          CREATE ROLE admin3d_command_owner NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+          CREATE ROLE payos_trust_owner NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+          CREATE ROLE admin3d_migrator LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD :'migrator_password';
+          CREATE ROLE app_runtime LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD :'runtime_password';
+          GRANT admin3d_owner TO admin3d_migrator WITH INHERIT FALSE, SET TRUE;
+          GRANT admin3d_lock_owner TO admin3d_migrator WITH INHERIT FALSE, SET TRUE;
+          GRANT admin3d_command_owner TO admin3d_migrator WITH INHERIT FALSE, SET TRUE;
+          GRANT payos_trust_owner TO admin3d_migrator WITH INHERIT FALSE, SET TRUE;
+          GRANT CONNECT ON DATABASE morphia3d TO admin3d_migrator, app_runtime;
+          GRANT USAGE, CREATE ON SCHEMA public TO admin3d_owner;
+          GRANT USAGE, CREATE ON SCHEMA public TO admin3d_migrator WITH GRANT OPTION;
+          GRANT USAGE ON SCHEMA public TO app_runtime;
+          SQL
+
+      - name: Apply Backend Flyway migrations
         working-directory: 2Dto3D_BE
         run: |
           bash ./mvnw --batch-mode --no-transfer-progress \
             -Dflyway.url="$DB_URL" \
-            -Dflyway.user=postgres \
-            -Dflyway.password="$DB_PASSWORD" \
+            -Dflyway.user=admin3d_migrator \
+            -Dflyway.password="$MIGRATOR_PASSWORD" \
+            -Dflyway.target=14 \
+            flyway:migrate
+          docker exec staff-e2e-postgres psql -X -v ON_ERROR_STOP=1 -U postgres -d morphia3d \
+            -c 'GRANT REFERENCES ON TABLE public.model_3d, public.media_asset, public.materials, public.users TO admin3d_owner'
+          bash ./mvnw --batch-mode --no-transfer-progress \
+            -Dflyway.url="$DB_URL" \
+            -Dflyway.user=admin3d_migrator \
+            -Dflyway.password="$MIGRATOR_PASSWORD" \
             flyway:migrate
 
       - name: Package Backend without rerunning its separate CI test suite
@@ -171,17 +203,26 @@ jobs:
             echo 'Packaged Backend JAR was not found in .mvn-target.'
             exit 1
           fi
-          java -jar "$jar" > "$RUNNER_TEMP/staff-e2e-backend.log" 2>&1 &
-          echo "$!" > "$RUNNER_TEMP/staff-e2e-backend.pid"
+          java -jar "$jar" \
+            --app.payment.payos.encryption-key-version=1 \
+            "--app.payment.payos.encryption-keyring[1]=$PAYOS_ENCRYPTION_KEY" \
+            > "$RUNNER_TEMP/staff-e2e-backend.log" 2>&1 &
+          backend_pid="$!"
+          echo "$backend_pid" > "$RUNNER_TEMP/staff-e2e-backend.pid"
 
           for attempt in $(seq 1 60); do
+            if ! kill -0 "$backend_pid" 2>/dev/null; then
+              echo 'Backend process exited before readiness; sanitized startup diagnostics follow.'
+              node ../2Dto3D_FE/scripts/sanitize-staff-e2e-log.mjs "$RUNNER_TEMP/staff-e2e-backend.log"
+              exit 1
+            fi
             if curl --silent --show-error --fail http://127.0.0.1:8080/api/auth/ping > /dev/null 2>&1; then
               echo 'Backend readiness endpoint returned HTTP 200.'
               exit 0
             fi
             sleep 2
           done
-          echo 'Backend readiness failed; sanitized startup diagnostics follow.'
+          echo "Backend readiness failed after ${attempt} attempts; sanitized startup diagnostics follow."
           node ../2Dto3D_FE/scripts/sanitize-staff-e2e-log.mjs "$RUNNER_TEMP/staff-e2e-backend.log"
           exit 1
 
@@ -198,21 +239,27 @@ jobs:
           set -euo pipefail
           node ./node_modules/vite/bin/vite.js --host 127.0.0.1 --no-open \
             > "$RUNNER_TEMP/staff-e2e-vite.log" 2>&1 &
-          echo "$!" > "$RUNNER_TEMP/staff-e2e-vite.pid"
+          vite_pid="$!"
+          echo "$vite_pid" > "$RUNNER_TEMP/staff-e2e-vite.pid"
           for attempt in $(seq 1 30); do
+            if ! kill -0 "$vite_pid" 2>/dev/null; then
+              echo 'Vite process exited before readiness.'
+              node scripts/sanitize-staff-e2e-log.mjs "$RUNNER_TEMP/staff-e2e-vite.log"
+              exit 1
+            fi
             if curl --silent --fail http://127.0.0.1:3000/login > /dev/null; then
               echo 'Vite login route is ready.'
               exit 0
             fi
             sleep 2
           done
-          echo 'Vite did not become ready.'
+          echo "Vite did not become ready after ${attempt} attempts."
           node scripts/sanitize-staff-e2e-log.mjs "$RUNNER_TEMP/staff-e2e-vite.log"
           exit 1
 
       - name: Run the real Edge Staff E2E scenarios
         working-directory: 2Dto3D_FE
-        run: npm run test:e2e
+        run: npx playwright test --config=playwright.e2e.config.js playwright-e2e/staff-admin-refresh.e2e.js
 
       - name: Stop QA processes and remove PostgreSQL
         if: always()
@@ -224,6 +271,6 @@ jobs:
           if [[ -f "$RUNNER_TEMP/staff-e2e-backend.pid" ]]; then
             kill "$(cat "$RUNNER_TEMP/staff-e2e-backend.pid")" 2>/dev/null
           fi
-          docker rm --force staff-e2e-postgres > /dev/null 2>&1
+          docker rm --force --volumes staff-e2e-postgres > /dev/null 2>&1
           rm -f "$RUNNER_TEMP/staff-e2e-vite.pid" "$RUNNER_TEMP/staff-e2e-backend.pid" \
             "$RUNNER_TEMP/staff-e2e-vite.log" "$RUNNER_TEMP/staff-e2e-backend.log"
