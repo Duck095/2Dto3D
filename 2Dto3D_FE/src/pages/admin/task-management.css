@@ -1,0 +1,62 @@
+.admin-task-page,
+.admin-acceptance-page { display: grid; gap: 1.25rem; }
+.admin-task-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 1rem; }
+.admin-task-kpi-link { display: block; border-radius: 1rem; text-decoration: none; }
+.admin-task-kpi-link:focus-visible { outline: 3px solid #5842b8; outline-offset: 3px; }
+.admin-task-kpi-link:hover { transform: translateY(-2px); }
+.admin-task-toolbar,
+.admin-task-pagination,
+.admin-task-pagination > div,
+.admin-task-form-heading,
+.admin-task-form__actions { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+.admin-task-filters,
+.admin-task-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; align-items: end; }
+.admin-task-form-card,
+.admin-acceptance-detail { display: grid; gap: 1rem; }
+.admin-task-form-heading { align-items: flex-start; }
+.admin-task-eyebrow,
+.admin-page-heading__eyebrow { font-size: .72rem; letter-spacing: .12em; font-weight: 800; color: #7968b6; }
+.admin-task-form-heading h3 { font-size: 1.2rem; font-weight: 750; }
+.admin-task-form__wide,
+.admin-task-form__actions { grid-column: 1 / -1; }
+.admin-task-form textarea,
+.admin-acceptance-review textarea { display: block; width: 100%; min-height: 8rem; padding: .75rem; border: 1px solid #d8d5e5; border-radius: .75rem; background: white; color: #202033; resize: vertical; }
+.admin-task-filters { padding: 1rem; border: 1px solid #e6e3ef; border-radius: 1rem; background: white; }
+.admin-task-loading,
+.admin-task-notice,
+.admin-task-error { padding: .85rem 1rem; border-radius: .75rem; }
+.admin-task-notice { color: #176b47; background: #e9f8f0; }
+.admin-task-error { color: #9f2b31; background: #fff0f0; }
+.admin-task-pagination { padding: .75rem 0; }
+.admin-task-pagination > div { justify-content: flex-end; }
+.admin-task-row-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
+.admin-task-detail { display: grid; gap: 1rem; }
+.admin-task-detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: .75rem; }
+.admin-task-detail-grid > div,
+.admin-task-detail-section { padding: 1rem; border: 1px solid #e6e3ef; border-radius: .85rem; background: white; }
+.admin-task-detail-grid dt { margin-bottom: .35rem; color: #6d687d; font-size: .8rem; }
+.admin-task-detail-grid dd { font-weight: 650; }
+.admin-task-detail-section h4 { margin-bottom: .65rem; font-weight: 750; }
+.admin-task-detail-edit { justify-self: start; }
+.admin-task-submission-list,
+.admin-task-history-list { display: grid; gap: .75rem; list-style: none; padding: 0; }
+.admin-task-submission-list li,
+.admin-task-history-list li { display: grid; gap: .55rem; padding: .9rem; border: 1px solid #e6e3ef; border-radius: .75rem; background: #fff; }
+.admin-task-submission-list li.is-current-cycle { border: 2px solid #3b9a6d; background: #effaf4; }
+.admin-task-submission-list li.is-latest-submission { border-width: 3px; box-shadow: 0 0 0 3px rgb(59 154 109 / 14%); }
+.admin-task-submission-list li.is-previous-cycle { background: #f5f4f7; color: #625e6e; }
+.admin-submission-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; }
+.admin-task-submission-list small,
+.admin-task-history-list small { color: #6d687d; }
+.admin-task-submission-list a { color: #4d39ad; text-decoration: underline; overflow-wrap: anywhere; }
+.admin-acceptance-result,
+.admin-acceptance-history,
+.admin-acceptance-review { display: grid; gap: .75rem; padding: 1rem; border: 1px solid #e6e3ef; border-radius: .85rem; background: white; }
+.admin-acceptance-result h4,
+.admin-acceptance-history h4 { font-weight: 750; }
+.admin-acceptance-history ol { display: grid; gap: .75rem; list-style: decimal; padding-left: 1.25rem; }
+.admin-acceptance-history li { padding: .5rem; border-bottom: 1px solid #eeeaf5; }
+.admin-acceptance-history pre { overflow: auto; padding: .6rem; border-radius: .5rem; background: #f7f6fa; font-size: .75rem; }
+.admin-acceptance-result a { color: #4d39ad; text-decoration: underline; overflow-wrap: anywhere; }
+@media (max-width: 900px) { .admin-task-filters,.admin-task-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .admin-task-filters,.admin-task-form { grid-template-columns: 1fr; } .admin-task-form__wide,.admin-task-form__actions { grid-column: 1; } .admin-task-pagination { align-items: flex-start; flex-direction: column; } }

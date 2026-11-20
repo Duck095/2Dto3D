@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "targetRepository": "https://github.com/Duck095/2Dto3D.git",
+  "importMode": "isolated-local-only",
+  "parentOrder": [
+    "frontend",
+    "backend"
+  ],
+  "sources": {
+    "frontend": {
+      "repository": "https://github.com/Duck095/2Dto3D_FE.git",
+      "branch": "main",
+      "commit": "f0459c084ed71190dc23b6182ac7146b812f44ee",
+      "bundleSha256": "c7c6f8aef7e1315ed93ffb082aaf33ca12bce275a9fe51578dc125efdb05945f"
+    },
+    "backend": {
+      "repository": "https://github.com/Duck095/2Dto3D_BE.git",
+      "branch": "main",
+      "commit": "11954867b3f4ea334cfb3247d2877780ef2e5917",
+      "bundleSha256": "cf78654f557f08ba94aa866e346ad2432c9c18a90ed34e7fbf0b0cc8656f2a55"
+    }
+  },
+  "preservation": {
+    "approvedSnapshotFiles": 624,
+    "heldDocumentationCandidates": 36,
+    "preservationTask": "SYS-GIT-MONOREPO-PRESERVATION-01B",
+    "manifest": "D:/2Dto3D/.workspace-cutover-backups/sys-git-monorepo-preservation-01b-20261120/snapshot-manifest.csv"
+  },
+  "candidateRefs": {
+    "frontend": "8233dc44b283043379e32f3549ba5f15fb210763",
+    "backend": "b2abd86127bad1eb43914ba37cf95e9f82c0425f",
+    "backendFoundation": "9e7f80a37a381bacd4bc41efdc04b3afa201234b",
+    "backendOriginMain": "e96cd5fb807a32abb433315d830d63130db2a32c"
+  }
+}

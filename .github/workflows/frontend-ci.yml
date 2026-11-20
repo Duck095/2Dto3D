@@ -26,12 +26,16 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: 2Dto3D_FE/package-lock.json
 
       - name: Install dependencies
+        working-directory: 2Dto3D_FE
         run: npm ci
 
       - name: Run unit tests
+        working-directory: 2Dto3D_FE
         run: npm test
 
       - name: Build production bundle
+        working-directory: 2Dto3D_FE
         run: npm run build

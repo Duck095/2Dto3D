@@ -1,0 +1,3 @@
+package com.exe.morphia3d.enums;
+
+public enum TaskHistoryAction { TASK_CREATED, TASK_UPDATED, TASK_REASSIGNED, TASK_STARTED, TASK_SUBMITTED, REVIEW_APPROVED, REVISION_REQUESTED }

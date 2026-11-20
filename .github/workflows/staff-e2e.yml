@@ -8,12 +8,6 @@ on:
     branches:
       - main
   workflow_dispatch:
-    inputs:
-      backend_ref:
-        description: Backend branch main or a full 40-character commit SHA
-        required: true
-        default: main
-        type: string
 
 permissions:
   contents: read
@@ -24,10 +18,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - name: Check out Frontend
+      - name: Check out monorepo
         uses: actions/checkout@v7
         with:
-          path: 2Dto3D_FE
           persist-credentials: false
 
       - name: Set up Node.js 22
@@ -37,35 +30,14 @@ jobs:
           cache: npm
           cache-dependency-path: 2Dto3D_FE/package-lock.json
 
-      - name: Check out public Backend at the requested ref
-        env:
-          BACKEND_REF: ${{ inputs.backend_ref || 'main' }}
+      - name: Record imported source revisions
         run: |
           set -euo pipefail
-          if [[ "$BACKEND_REF" != "main" && ! "$BACKEND_REF" =~ ^[0-9a-fA-F]{40}$ ]]; then
-            echo "backend_ref must be main or a full 40-character commit SHA."
-            exit 1
-          fi
-
-          if [[ "$BACKEND_REF" == "main" ]]; then
-            git clone --depth 1 --branch main --single-branch \
-              https://github.com/Duck095/2Dto3D_BE.git 2Dto3D_BE
-          else
-            git clone --filter=blob:none --no-checkout \
-              https://github.com/Duck095/2Dto3D_BE.git 2Dto3D_BE
-            git -C 2Dto3D_BE fetch --depth 1 origin "$BACKEND_REF"
-            git -C 2Dto3D_BE checkout --detach FETCH_HEAD
-          fi
-
-          frontend_sha="$(git -C 2Dto3D_FE rev-parse HEAD)"
-          backend_sha="$(git -C 2Dto3D_BE rev-parse HEAD)"
-          if [[ "$BACKEND_REF" != "main" && "${BACKEND_REF,,}" != "$backend_sha" ]]; then
-            echo "The checked out Backend SHA does not match backend_ref."
-            exit 1
-          fi
+          frontend_sha="$(jq -r '.sources.frontend.commit' IMPORT_PROVENANCE.json)"
+          backend_sha="$(jq -r '.sources.backend.commit' IMPORT_PROVENANCE.json)"
           echo "::notice title=E2E source revisions::FE=$frontend_sha BE=$backend_sha"
-          printf '### E2E source revisions\n- Frontend: %s\n- Backend: %s\n' \
-            "$frontend_sha" "$backend_sha" >> "$GITHUB_STEP_SUMMARY"
+          printf '### Monorepo source provenance\n- Monorepo: %s\n- Frontend source: %s\n- Backend source: %s\n' \
+            "$GITHUB_SHA" "$frontend_sha" "$backend_sha" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Set up Java 17
         uses: actions/setup-java@v6
