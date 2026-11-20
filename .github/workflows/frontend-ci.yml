@@ -32,6 +32,17 @@ jobs:
         working-directory: 2Dto3D_FE
         run: npm ci
 
+      - name: Set deterministic feature flags for checkout safety tests
+        working-directory: 2Dto3D_FE
+        run: |
+          cat > .env.development.local <<'EOF'
+          VITE_FEATURE_AI_STUDIO=true
+          VITE_FEATURE_CART=true
+          VITE_FEATURE_CHECKOUT=true
+          VITE_FEATURE_PRINT_QUOTE=true
+          VITE_DEMO_MODE=false
+          EOF
+
       - name: Run unit tests
         working-directory: 2Dto3D_FE
         run: npm test
