@@ -321,14 +321,15 @@ test('USER cannot access staff administration and Staff API enforces authenticat
   expect(typeof loginData.token).toBe('string');
   await page.waitForURL(url => url.pathname === '/');
 
-  const browserStaffListResponses = [];
-  page.on('response', response => {
-    if (isApiRequest(response.request(), STAFF_API_PATH)) browserStaffListResponses.push(response.status());
+  const browserStaffListRequests = [];
+  page.on('request', request => {
+    if (isApiRequest(request, STAFF_API_PATH)) browserStaffListRequests.push(request.method());
   });
   await page.goto('/admin/staff');
-  await expectUniqueVisible(page.getByRole('heading', { name: 'Bạn không có quyền truy cập' }));
+  await expectUniqueVisible(page.getByRole('heading', { name: 'Oops! Khu vực này chưa mở cho bạn' }));
   await expect(page).toHaveURL(/\/admin\/staff$/);
-  expect(browserStaffListResponses).toEqual([]);
+  await page.waitForLoadState('networkidle');
+  expect(browserStaffListRequests).toEqual([]);
 
   const authenticatedStaffResponse = await request.get('http://127.0.0.1:3000/api/admin/staff', {
     headers: { Authorization: `Bearer ${loginData.token}` },
@@ -337,4 +338,11 @@ test('USER cannot access staff administration and Staff API enforces authenticat
 
   const unauthenticatedStaffResponse = await request.get('http://127.0.0.1:3000/api/admin/staff');
   expect(unauthenticatedStaffResponse.status()).toBe(401);
+
+  console.log(
+    `Staff access denial verified: route=${new URL(page.url()).pathname}; ` +
+    `FE_GET_staff_list=${browserStaffListRequests.length}; ` +
+    `authenticated_status=${authenticatedStaffResponse.status()}; ` +
+    `unauthenticated_status=${unauthenticatedStaffResponse.status()}`,
+  );
 });
