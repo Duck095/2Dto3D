@@ -8,10 +8,12 @@ import com.exe.morphia3d.mapper.MaterialMapper;
 import com.exe.morphia3d.repository.MaterialRepository;
 import com.exe.morphia3d.service.MaterialService;
 import jakarta.persistence.EntityNotFoundException;
-import org.h2.jdbcx.JdbcDataSource;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -20,6 +22,8 @@ import java.lang.reflect.Proxy;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.UUID;
+import org.testcontainers.containers.PostgreSQLContainer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -32,6 +36,21 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class MaterialRetirementIntegrationTest {
 
+    private static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
+            .withDatabaseName("material_retirement_test")
+            .withUsername("material_retirement_test")
+            .withPassword("material_retirement_test_only");
+
+    @BeforeAll
+    static void startDisposablePostgres() {
+        POSTGRES.start();
+    }
+
+    @AfterAll
+    static void stopDisposablePostgres() {
+        POSTGRES.stop();
+    }
+
     private JdbcTemplate jdbc;
     private MockMvc mockMvc;
     private MaterialService materialService;
@@ -39,15 +58,18 @@ class MaterialRetirementIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        JdbcDataSource dataSource = new JdbcDataSource();
-        dataSource.setURL("jdbc:h2:mem:material_retirement_" + System.nanoTime()
-                + ";MODE=PostgreSQL;DB_CLOSE_DELAY=-1");
-        dataSource.setUser("sa");
+        String schema = "material_retirement_" + UUID.randomUUID().toString().replace("-", "");
+        DriverManagerDataSource bootstrap = new DriverManagerDataSource(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        new JdbcTemplate(bootstrap).execute("CREATE SCHEMA " + schema);
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                POSTGRES.getJdbcUrl() + "&currentSchema=" + schema,
+                POSTGRES.getUsername(), POSTGRES.getPassword());
         jdbc = new JdbcTemplate(dataSource);
         createSchema();
         physicalDeleteCalls = new AtomicInteger();
 
-        MaterialRepository materialRepository = repositoryBackedByH2();
+        MaterialRepository materialRepository = repositoryBackedByPostgres();
         MaterialMapper materialMapper = mapperForResponse();
         materialService = new MaterialServiceImpl(materialRepository, null, null, materialMapper);
         mockMvc = MockMvcBuilders.standaloneSetup(new MaterialController(materialService)).build();
@@ -135,7 +157,7 @@ class MaterialRetirementIntegrationTest {
                 + "VALUES (19, 7, 11, 13)");
     }
 
-    private MaterialRepository repositoryBackedByH2() {
+    private MaterialRepository repositoryBackedByPostgres() {
         return (MaterialRepository) Proxy.newProxyInstance(
                 MaterialRepository.class.getClassLoader(),
                 new Class<?>[]{MaterialRepository.class},
@@ -148,7 +170,7 @@ class MaterialRetirementIntegrationTest {
                         jdbc.update("DELETE FROM materials WHERE material_id = ?", ((Material) args[0]).getId());
                         yield null;
                     }
-                    case "toString" -> "H2-backed material repository test adapter";
+                    case "toString" -> "PostgreSQL-backed material repository test adapter";
                     default -> throw new UnsupportedOperationException("Unexpected repository call: " + method);
                 });
     }

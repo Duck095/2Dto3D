@@ -42,7 +42,7 @@ Cleanup attempt count increments when a worker claims an attempt, so a process c
 - If a delete succeeds but marking `DELETED` has an ambiguous commit or database failure, the cleanup lease expires and a later attempt repeats the exact delete. Provider not-found is treated as idempotent success.
 - If the database is unavailable before the call, cleanup stops. If it becomes unavailable after Cloudinary deletion, the row remains leased until expiry and the retry may see provider not-found.
 - A process crash can delay work until the next poll and lease expiry. Provider or database outages can delay cleanup indefinitely. The reconciler provides bounded automatic attempts, not an absolute guarantee that every remote orphan is removed.
-- PostgreSQL row locking and multi-instance contention require the Testcontainers test. H2 tests cover transitions and application logic but do not certify PostgreSQL concurrency semantics.
+- PostgreSQL row locking and multi-instance contention are exercised with disposable PostgreSQL Testcontainers. Database-backed integration tests use PostgreSQL; unit tests that do not access a database remain database-free.
 
 No production migration is executed by this task. V1 baseline adoption, V2 PostgreSQL verification, and actual provider verification remain release gates.
 
@@ -52,4 +52,4 @@ No production migration is executed by this task. V1 baseline adoption, V2 Postg
 
 Catalog page reads fetch thumbnail rows and their media metadata in one set-wise image query after the paginated model query. Detail reads fetch the model media association and all image media associations with entity graphs; model parts remain a separate bounded query. Repository predicates continue to require `DESIGNER_MODEL` and `ACTIVE`, excluding AI, pending, and inactive records.
 
-The default suite verifies these mappings and query bounds against H2 and mocks Cloudinary. It does not verify PostgreSQL migration/locking behavior or real Cloudinary URL delivery. V1 baseline adoption, PostgreSQL V2 verification, and real provider upload/download/delete remain production release gates. Existing AI uploads continue to use the legacy service and are outside the public product catalog.
+The suite verifies these mappings and query bounds against PostgreSQL Testcontainers and mocks Cloudinary. It does not verify real Cloudinary URL delivery. V1 baseline adoption, PostgreSQL V2 verification, and real provider upload/download/delete remain production release gates. Existing AI uploads continue to use the legacy service and are outside the public product catalog.
