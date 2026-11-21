@@ -30,9 +30,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @ActiveProfiles("test")
 class TaskManagementServiceTest {
  @DynamicPropertySource
- static void isolateH2Database(DynamicPropertyRegistry registry) {
+ static void isolatePostgresDatabase(DynamicPropertyRegistry registry) {
   registry.add("spring.datasource.url", () ->
-   "jdbc:h2:mem:task-management-service-test;DB_CLOSE_DELAY=-1;INIT=CREATE DOMAIN IF NOT EXISTS JSONB AS JSON");
+   "jdbc:tc:postgresql:16-alpine:///morphia");
  }
 
  @Autowired TaskManagementService service; @Autowired UserRepository users; @Autowired StaffProfileRepository profiles;

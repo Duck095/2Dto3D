@@ -42,9 +42,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class StaffManagementTransactionIntegrationTest {
 
     @DynamicPropertySource
-    static void isolateH2Database(DynamicPropertyRegistry registry) {
+    static void isolatePostgresDatabase(DynamicPropertyRegistry registry) {
         registry.add("spring.datasource.url", () ->
-                "jdbc:h2:mem:staff-management-transaction-test;DB_CLOSE_DELAY=-1;INIT=CREATE DOMAIN IF NOT EXISTS JSONB AS JSON");
+                "jdbc:tc:postgresql:16-alpine:///morphia");
     }
 
     @Autowired private UserRepository users;

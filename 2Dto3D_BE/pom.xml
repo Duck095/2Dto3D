@@ -139,11 +139,6 @@
             <scope>test</scope>
         </dependency>
 
-        <dependency>
-            <groupId>com.h2database</groupId>
-            <artifactId>h2</artifactId>
-            <scope>test</scope>
-        </dependency>
 
         <dependency>
             <groupId>org.testcontainers</groupId>
@@ -219,6 +214,9 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
                     <argLine>@{argLine} -javaagent:"${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar"</argLine>
+                    <systemPropertyVariables>
+                        <spring.test.context.cache.maxSize>1</spring.test.context.cache.maxSize>
+                    </systemPropertyVariables>
                 </configuration>
             </plugin>
 

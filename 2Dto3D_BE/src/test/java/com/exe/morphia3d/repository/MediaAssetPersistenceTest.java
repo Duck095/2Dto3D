@@ -8,6 +8,8 @@ import com.exe.morphia3d.enums.MediaKind;
 import com.exe.morphia3d.enums.MediaProvider;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.metamodel.ManagedType;
+import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.MigrationVersion;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -17,20 +19,71 @@ import org.springframework.jdbc.core.PreparedStatementCreator;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import com.exe.morphia3d.test.support.PostgresTestRoleProvisioning;
 
 import java.util.UUID;
 import java.util.Set;
 import java.util.stream.Collectors;
-import java.sql.Statement;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.sql.Savepoint;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-@SpringBootTest
+@SpringBootTest(properties = {
+        "spring.jpa.hibernate.ddl-auto=validate",
+        "spring.flyway.enabled=true"
+})
 @ActiveProfiles("test")
 @Transactional
+@Testcontainers
 class MediaAssetPersistenceTest {
+
+    @Container
+    private static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
+            .withDatabaseName("media_asset_persistence")
+            .withUsername("media_asset_persistence")
+            .withPassword("media_asset_persistence_test_only");
+
+    @DynamicPropertySource
+    static void postgresProperties(DynamicPropertyRegistry registry) {
+        migrateCanonicalSchema();
+        registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
+        registry.add("spring.datasource.username", POSTGRES::getUsername);
+        registry.add("spring.datasource.password", POSTGRES::getPassword);
+        registry.add("spring.datasource.driver-class-name", POSTGRES::getDriverClassName);
+        registry.add("spring.jpa.database-platform", () -> "org.hibernate.dialect.PostgreSQLDialect");
+    }
+
+    private static synchronized void migrateCanonicalSchema() {
+        String url = POSTGRES.getJdbcUrl();
+        String username = POSTGRES.getUsername();
+        String password = POSTGRES.getPassword();
+        JdbcTemplate bootstrap = new JdbcTemplate(new DriverManagerDataSource(url, username, password));
+        PostgresTestRoleProvisioning.provisionMigrationRoles(bootstrap, username);
+        Flyway.configure().dataSource(url, username, password)
+                .locations("classpath:db/migration")
+                .schemas("public").defaultSchema("public")
+                .target(MigrationVersion.fromVersion("14"))
+                .cleanDisabled(true).load().migrate();
+        PostgresTestRoleProvisioning.grantSnapshotReferencePrivileges(bootstrap);
+        Flyway finalMigrations = Flyway.configure().dataSource(url, username, password)
+                .locations("classpath:db/migration")
+                .schemas("public").defaultSchema("public")
+                .cleanDisabled(true).load();
+        finalMigrations.migrate();
+        finalMigrations.validate();
+    }
 
     @Autowired
     private EntityManager entityManager;
@@ -170,9 +223,9 @@ class MediaAssetPersistenceTest {
                 "INSERT INTO model_images (model_id, image_path, is_primary, media_asset_id, uploaded_at) " +
                         "VALUES (?, 'legacy/image', TRUE, ?, CURRENT_TIMESTAMP)", modelId, imageAssetId);
 
-        assertThatThrownBy(() -> jdbcTemplate.update("DELETE FROM media_asset WHERE id = ?", modelAssetId))
+        assertThatThrownBy(() -> deleteAssetExpectingForeignKeyRestriction(modelAssetId))
                 .isInstanceOf(DataIntegrityViolationException.class);
-        assertThatThrownBy(() -> jdbcTemplate.update("DELETE FROM media_asset WHERE id = ?", imageAssetId))
+        assertThatThrownBy(() -> deleteAssetExpectingForeignKeyRestriction(imageAssetId))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
@@ -184,7 +237,7 @@ class MediaAssetPersistenceTest {
                 "products/images/first.png', 'PENDING_UPLOAD', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)";
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update((PreparedStatementCreator) connection -> {
-            var statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+            var statement = connection.prepareStatement(sql, new String[] {"id"});
             statement.setObject(1, operationId);
             statement.setString(2, providerAssetId);
             statement.setString(3, publicId);
@@ -222,10 +275,28 @@ class MediaAssetPersistenceTest {
                 "VALUES ('DESIGNER_MODEL', 'PENDING', 'legacy/model', ?, CURRENT_TIMESTAMP)";
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update((PreparedStatementCreator) connection -> {
-            var statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+            var statement = connection.prepareStatement(sql, new String[] {"model_id"});
             statement.setLong(1, assetId);
             return statement;
         }, keyHolder);
         return keyHolder.getKey().intValue();
+    }
+
+    private void deleteAssetExpectingForeignKeyRestriction(Long assetId) {
+        jdbcTemplate.execute((org.springframework.jdbc.core.ConnectionCallback<Void>) connection -> {
+            Savepoint savepoint = connection.setSavepoint();
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "DELETE FROM media_asset WHERE id = ?")) {
+                statement.setLong(1, assetId);
+                statement.executeUpdate();
+                throw new AssertionError("Expected the model/image foreign key to restrict media deletion");
+            } catch (SQLException failure) {
+                connection.rollback(savepoint);
+                assertThat(failure.getSQLState()).isEqualTo("23503");
+                throw new DataIntegrityViolationException("Expected media asset foreign key restriction", failure);
+            } finally {
+                connection.releaseSavepoint(savepoint);
+            }
+        });
     }
 }

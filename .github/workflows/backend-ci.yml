@@ -71,6 +71,21 @@ jobs:
           sed 's/\r$//' .mvn/wrapper/maven-wrapper.properties |
             grep -Fx -- 'distributionUrl=https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.9/apache-maven-3.9.9-bin.zip'
 
+      - name: Focused PostgreSQL persistence tests in discovery order
+        working-directory: 2Dto3D_BE
+        run: >-
+          bash ./mvnw --batch-mode --no-transfer-progress
+          -Dtest=AdminProductMeshHttpIntegrationTest,MediaAssetLegacySchemaMigrationPostgresTest,MediaAssetMigrationPostgresTest,MediaAssetPersistenceTest,MaterialRetirementIntegrationTest,MaterialRetirementJpaIntegrationTest,ModelAggregatePersistenceTest,ProductSecurityIntegrationTest,PublicProductCatalogRepositoryTest,StaffManagementTransactionIntegrationTest,TaskManagementServiceTest
+          test
+
+      - name: Focused PostgreSQL persistence tests in reverse order
+        working-directory: 2Dto3D_BE
+        run: >-
+          bash ./mvnw --batch-mode --no-transfer-progress
+          -Dsurefire.runOrder=reversealphabetical
+          -Dtest=AdminProductMeshHttpIntegrationTest,MediaAssetLegacySchemaMigrationPostgresTest,MediaAssetMigrationPostgresTest,MediaAssetPersistenceTest,MaterialRetirementIntegrationTest,MaterialRetirementJpaIntegrationTest,ModelAggregatePersistenceTest,ProductSecurityIntegrationTest,PublicProductCatalogRepositoryTest,StaffManagementTransactionIntegrationTest,TaskManagementServiceTest
+          test
+
       - name: Full Backend clean verify
         working-directory: 2Dto3D_BE
         run: bash ./mvnw --batch-mode --no-transfer-progress clean verify
@@ -78,3 +93,24 @@ jobs:
       - name: PayOS browser E2E on disposable PostgreSQL
         working-directory: 2Dto3D_BE
         run: bash ./mvnw --batch-mode --no-transfer-progress -Dtest=PayosFinalAcceptanceBrowserE2E test
+
+      - name: Verify Testcontainers cleanup
+        if: always()
+        run: |
+          for attempt in $(seq 1 60); do
+            remaining="$(docker ps -aq --filter label=org.testcontainers=true)"
+            if [ -z "$remaining" ]; then break; fi
+            sleep 1
+          done
+          docker ps -a --format 'table {{.ID}}\t{{.Image}}\t{{.Names}}\t{{.Status}}'
+          docker volume ls --format 'table {{.Name}}\t{{.Driver}}'
+          remaining="$(docker ps -aq --filter label=org.testcontainers=true)"
+          remaining_volumes="$(docker volume ls -q --filter label=org.testcontainers=true)"
+          if [ -n "$remaining" ]; then
+            echo "Testcontainers resources remain after backend verification: $remaining"
+            exit 1
+          fi
+          if [ -n "$remaining_volumes" ]; then
+            echo "Testcontainers volumes remain after backend verification: $remaining_volumes"
+            exit 1
+          fi
