@@ -52,7 +52,10 @@ jobs:
 
       - name: Verify Maven Wrapper distribution
         working-directory: 2Dto3D_BE
-        run: grep -Fx 'distributionUrl=https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.9/apache-maven-3.9.9-bin.zip' .mvn/wrapper/maven-wrapper.properties
+        run: |
+          set -o pipefail
+          sed 's/\r$//' .mvn/wrapper/maven-wrapper.properties |
+            grep -Fx -- 'distributionUrl=https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.9/apache-maven-3.9.9-bin.zip'
 
       - name: Build and run tests
         working-directory: 2Dto3D_BE
