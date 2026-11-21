@@ -52,7 +52,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest(classes = Morphia3dApplication.class, properties = {
-        "spring.datasource.url=jdbc:h2:mem:admin_mesh_http;DB_CLOSE_DELAY=-1",
+        "spring.datasource.url=jdbc:h2:mem:admin_mesh_http;DB_CLOSE_DELAY=-1;INIT=CREATE DOMAIN IF NOT EXISTS JSONB AS JSON",
         "spring.jpa.hibernate.ddl-auto=none",
         "media.lifecycle.reconciliation-enabled=false"})
 @ActiveProfiles("test")

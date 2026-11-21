@@ -8,17 +8,13 @@ import com.exe.morphia3d.service.payment.payos.PayosGateway;
 import com.exe.morphia3d.service.payment.payos.PayosPaymentPersistenceService;
 import com.exe.morphia3d.service.payment.payos.PayosProtocol;
 import com.exe.morphia3d.service.payment.provider.ProviderPaymentState;
-import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 
 import java.util.Map;
 import java.util.UUID;
 
 /** Applies only cryptographically verified, identity-matched provider query evidence. */
-@Service
-@ConditionalOnBean(PayosPaymentPersistenceService.class)
 public class PayosReconciliationProcessingService {
     private final Map<String, PayosGateway> gatewaysByChannel;
     private final PayosPaymentPersistenceService persistence;

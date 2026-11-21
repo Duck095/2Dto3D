@@ -9,8 +9,12 @@ import com.exe.morphia3d.enums.UserStatus;
 import com.exe.morphia3d.repository.PayosPaymentLinkRepository;
 import com.exe.morphia3d.repository.UserRepository;
 import com.exe.morphia3d.service.PayosWebhookProcessingService;
+import com.exe.morphia3d.service.PayosReconciliationProcessingService;
+import com.exe.morphia3d.service.payment.payos.PayosPaymentPersistenceService;
 import com.exe.morphia3d.service.payment.payos.PayosProtocol;
+import com.exe.morphia3d.test.support.PostgresTestRoleProvisioning;
 import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.MigrationVersion;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -26,6 +30,9 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.context.annotation.Import;
+import org.springframework.context.ApplicationContext;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -77,14 +84,30 @@ class PayosFinalAcceptanceBrowserE2E {
     @DynamicPropertySource
     static void configureIsolatedPostgres(DynamicPropertyRegistry registry) {
         if (!POSTGRES.isRunning()) POSTGRES.start();
+        String jdbcUrl = POSTGRES.getJdbcUrl();
+        JdbcTemplate bootstrap = new JdbcTemplate(new DriverManagerDataSource(
+                jdbcUrl, POSTGRES.getUsername(), POSTGRES.getPassword()));
+        PostgresTestRoleProvisioning.provisionMigrationRoles(bootstrap, POSTGRES.getUsername());
         Flyway.configure()
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .locations("classpath:db/migration")
                 .schemas("public")
                 .defaultSchema("public")
                 .cleanDisabled(true)
+                .target(MigrationVersion.fromVersion("14"))
                 .load()
                 .migrate();
+        PostgresTestRoleProvisioning.grantSnapshotReferencePrivileges(bootstrap);
+        Flyway flyway = Flyway.configure()
+                .dataSource(jdbcUrl, POSTGRES.getUsername(), POSTGRES.getPassword())
+                .locations("classpath:db/migration")
+                .schemas("public")
+                .defaultSchema("public")
+                .cleanDisabled(true)
+                .validateOnMigrate(true)
+                .load();
+        flyway.migrate();
+        flyway.validate();
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);
@@ -99,9 +122,13 @@ class PayosFinalAcceptanceBrowserE2E {
     @Autowired private PayosPaymentLinkRepository links;
     @Autowired private PayosWebhookProcessingService webhookProcessor;
     @Autowired private AtomicInteger payosCreateCalls;
+    @Autowired private ApplicationContext context;
 
     @Test
     void checkoutOrderPaymentWebhookAndOwnerScopedSuccessRunAgainstRealBackend() throws Exception {
+        assertThat(context.getBeansOfType(PayosPaymentPersistenceService.class)).hasSize(1);
+        assertThat(context.getBeansOfType(PayosWebhookProcessingService.class)).hasSize(1);
+        assertThat(context.getBeansOfType(PayosReconciliationProcessingService.class)).hasSize(1);
         String runId = UUID.randomUUID().toString();
         String ownerEmail = "payos-owner-" + runId + "@example.invalid";
         String otherEmail = "payos-other-" + runId + "@example.invalid";

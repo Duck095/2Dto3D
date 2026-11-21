@@ -16,8 +16,6 @@ import com.exe.morphia3d.repository.PayosReconciliationQueryRepository;
 import com.exe.morphia3d.service.PaymentAttemptStateService;
 import com.exe.morphia3d.service.PaymentApiException;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Service;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.net.URI;
@@ -33,8 +31,6 @@ import java.util.Set;
 import java.util.UUID;
 
 /** Durable payOS identity/link storage. It never performs provider I/O. */
-@Service
-@ConditionalOnBean(PayosSensitiveDataCipher.class)
 public class PayosPaymentPersistenceService {
     private final PaymentAttemptRepository attempts;
     private final OrderRepository orders;
