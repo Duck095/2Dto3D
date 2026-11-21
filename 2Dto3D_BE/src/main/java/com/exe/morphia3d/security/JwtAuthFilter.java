@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -17,11 +18,20 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.sql.SQLException;
+import java.util.ArrayDeque;
+import java.util.Collections;
+import java.util.Deque;
+import java.util.IdentityHashMap;
+import java.util.Locale;
+import java.util.Set;
 
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class JwtAuthFilter extends OncePerRequestFilter {
+
+    private static final Set<String> POSTGRESQL_UNAVAILABLE_STATES = Set.of("57P01", "57P02", "57P03", "57P04");
 
     private final JwtUtil jwtUtil;
     private final UserDetailsServiceImpl userDetailsService;
@@ -47,9 +57,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                         userDetails = userDetailsService.loadUserByUsername(email);
                     } catch (UsernameNotFoundException missingAccount) {
                         SecurityContextHolder.clearContext();
-                    } catch (DataAccessResourceFailureException persistenceUnavailable) {
-                        if (!isAdminMeshEndpoint(request)) {
-                            throw persistenceUnavailable;
+                    } catch (DataAccessException persistenceFailure) {
+                        if (!isAdminMeshEndpoint(request) || !isConnectionUnavailable(persistenceFailure)) {
+                            throw persistenceFailure;
                         }
                         SecurityContextHolder.clearContext();
                         response.setStatus(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
@@ -91,5 +101,42 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         return ("GET".equals(method) && ("mesh-structure".equals(segments[5])
                 || "mesh-configurations".equals(segments[5])))
                 || ("PUT".equals(method) && "mesh-configurations".equals(segments[5]));
+    }
+
+    private boolean isConnectionUnavailable(DataAccessException failure) {
+        if (failure instanceof DataAccessResourceFailureException) {
+            return true;
+        }
+
+        Set<Throwable> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+        Deque<Throwable> pending = new ArrayDeque<>();
+        pending.add(failure);
+        while (!pending.isEmpty()) {
+            Throwable current = pending.removeFirst();
+            if (!visited.add(current)) {
+                continue;
+            }
+            if (current instanceof SQLException sqlException) {
+                if (isConnectionUnavailableSqlState(sqlException.getSQLState())) {
+                    return true;
+                }
+                if (sqlException.getNextException() != null) {
+                    pending.addLast(sqlException.getNextException());
+                }
+            }
+            if (current.getCause() != null) {
+                pending.addLast(current.getCause());
+            }
+        }
+        return false;
+    }
+
+    private boolean isConnectionUnavailableSqlState(String sqlState) {
+        if (sqlState == null) {
+            return false;
+        }
+        String normalized = sqlState.toUpperCase(Locale.ROOT);
+        return normalized.startsWith("08")
+                || POSTGRESQL_UNAVAILABLE_STATES.contains(normalized);
     }
 }
