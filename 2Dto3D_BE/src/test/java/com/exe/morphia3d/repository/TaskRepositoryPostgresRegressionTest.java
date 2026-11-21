@@ -14,18 +14,20 @@ import com.exe.morphia3d.security.UserDetailsServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.WebApplicationContext;
 import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.DockerImageName;
 
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -39,23 +41,22 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest(classes = Morphia3dApplication.class)
 @ActiveProfiles("test")
-@Testcontainers(disabledWithoutDocker = true)
+@Import(TaskRepositoryPostgresRegressionTest.PostgresContainerConfiguration.class)
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @Transactional
 class TaskRepositoryPostgresRegressionTest {
-    @Container
-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
-            .withDatabaseName("task_list_regression")
-            .withUsername("task_list_qa")
-            .withPassword("task_list_qa");
-
-    @DynamicPropertySource
-    static void postgresProperties(DynamicPropertyRegistry properties) {
-        properties.add("spring.datasource.url", POSTGRES::getJdbcUrl);
-        properties.add("spring.datasource.username", POSTGRES::getUsername);
-        properties.add("spring.datasource.password", POSTGRES::getPassword);
-        properties.add("spring.datasource.driver-class-name", POSTGRES::getDriverClassName);
-        properties.add("spring.jpa.database-platform", () -> "org.hibernate.dialect.PostgreSQLDialect");
-        properties.add("spring.jpa.hibernate.ddl-auto", () -> "create-drop");
+    @TestConfiguration(proxyBeanMethods = false)
+    static class PostgresContainerConfiguration {
+        @Bean
+        @ServiceConnection
+        PostgreSQLContainer<?> taskRepositoryPostgresContainer() {
+            return new PostgreSQLContainer<>(DockerImageName.parse(
+                    "postgres@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea")
+                    .asCompatibleSubstituteFor("postgres"))
+                    .withDatabaseName("task_list_regression")
+                    .withUsername("task_list_qa")
+                    .withPassword("task_list_qa");
+        }
     }
 
     @Autowired WebApplicationContext context;

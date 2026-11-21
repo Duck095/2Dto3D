@@ -13,17 +13,19 @@ import com.exe.morphia3d.security.UserPrincipal;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.WebApplicationContext;
 import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.DockerImageName;
 
 import java.time.LocalDate;
 import java.util.UUID;
@@ -35,26 +37,23 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest(classes = Morphia3dApplication.class)
 @ActiveProfiles("test")
-@Testcontainers(disabledWithoutDocker = true)
+@Import(StaffManagementSearchPostgresIntegrationTest.PostgresContainerConfiguration.class)
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @Transactional
 class StaffManagementSearchPostgresIntegrationTest {
 
-    @Container
-    private static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
-            .withDatabaseName("staff_search")
-            .withUsername("staff_search_test")
-            .withPassword("staff_search_test_only");
-
-    @DynamicPropertySource
-    static void postgresProperties(DynamicPropertyRegistry properties) {
-        properties.add("spring.datasource.url", POSTGRES::getJdbcUrl);
-        properties.add("spring.datasource.username", POSTGRES::getUsername);
-        properties.add("spring.datasource.password", POSTGRES::getPassword);
-        properties.add("spring.datasource.driver-class-name", () -> "org.postgresql.Driver");
-        properties.add("spring.jpa.database-platform", () -> "org.hibernate.dialect.PostgreSQLDialect");
-        // The Testcontainer is isolated; let Hibernate create the mapped test tables without applying or changing migrations.
-        properties.add("spring.jpa.hibernate.ddl-auto", () -> "create-drop");
-        properties.add("spring.flyway.enabled", () -> "false");
+    @TestConfiguration(proxyBeanMethods = false)
+    static class PostgresContainerConfiguration {
+        @Bean
+        @ServiceConnection
+        PostgreSQLContainer<?> staffSearchPostgresContainer() {
+            return new PostgreSQLContainer<>(DockerImageName.parse(
+                    "postgres@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea")
+                    .asCompatibleSubstituteFor("postgres"))
+                    .withDatabaseName("staff_search")
+                    .withUsername("staff_search_test")
+                    .withPassword("staff_search_test_only");
+        }
     }
 
     @Autowired private WebApplicationContext context;
