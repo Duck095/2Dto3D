@@ -75,7 +75,7 @@ jobs:
         working-directory: 2Dto3D_BE
         run: >-
           bash ./mvnw --batch-mode --no-transfer-progress
-          -Dtest=AdminProductMeshHttpIntegrationTest,MediaAssetLegacySchemaMigrationPostgresTest,MediaAssetMigrationPostgresTest,MediaAssetPersistenceTest,MaterialRetirementIntegrationTest,MaterialRetirementJpaIntegrationTest,ModelAggregatePersistenceTest,ProductSecurityIntegrationTest,PublicProductCatalogRepositoryTest,StaffManagementTransactionIntegrationTest,TaskManagementServiceTest
+          -Dtest=AdminProductMeshHttpIntegrationTest,MediaAssetLegacySchemaMigrationPostgresTest,MediaAssetMigrationPostgresTest,MediaAssetPersistenceTest,MaterialRetirementIntegrationTest,MaterialRetirementJpaIntegrationTest,ModelAggregatePersistenceTest,ProductSecurityIntegrationTest,PublicProductCatalogRepositoryTest,StaffManagementSearchPostgresIntegrationTest,StaffManagementTransactionIntegrationTest,TaskManagementServiceTest,TaskRepositoryPostgresRegressionTest,MediaAssetLifecyclePostgresTest
           test
 
       - name: Focused PostgreSQL persistence tests in reverse order
@@ -83,7 +83,7 @@ jobs:
         run: >-
           bash ./mvnw --batch-mode --no-transfer-progress
           -Dsurefire.runOrder=reversealphabetical
-          -Dtest=AdminProductMeshHttpIntegrationTest,MediaAssetLegacySchemaMigrationPostgresTest,MediaAssetMigrationPostgresTest,MediaAssetPersistenceTest,MaterialRetirementIntegrationTest,MaterialRetirementJpaIntegrationTest,ModelAggregatePersistenceTest,ProductSecurityIntegrationTest,PublicProductCatalogRepositoryTest,StaffManagementTransactionIntegrationTest,TaskManagementServiceTest
+          -Dtest=AdminProductMeshHttpIntegrationTest,MediaAssetLegacySchemaMigrationPostgresTest,MediaAssetMigrationPostgresTest,MediaAssetPersistenceTest,MaterialRetirementIntegrationTest,MaterialRetirementJpaIntegrationTest,ModelAggregatePersistenceTest,ProductSecurityIntegrationTest,PublicProductCatalogRepositoryTest,StaffManagementSearchPostgresIntegrationTest,StaffManagementTransactionIntegrationTest,TaskManagementServiceTest,TaskRepositoryPostgresRegressionTest,MediaAssetLifecyclePostgresTest
           test
 
       - name: Full Backend clean verify

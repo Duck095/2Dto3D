@@ -2,14 +2,15 @@ package com.exe.morphia3d.service;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.annotation.DirtiesContext;
 import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 import com.exe.morphia3d.enums.MediaKind;
 import com.exe.morphia3d.enums.MediaProvider;
@@ -43,24 +44,23 @@ import static org.assertj.core.api.Assertions.assertThat;
         "spring.flyway.enabled=false",
         "media.lifecycle.reconciliation-interval-millis=3600000"
 })
+@Import(MediaAssetLifecyclePostgresTest.PostgresContainerConfiguration.class)
 @ActiveProfiles("test")
-@Testcontainers(disabledWithoutDocker = false)
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class MediaAssetLifecyclePostgresTest {
 
-    @Container
-    private static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>(DockerImageName.parse(
-            "postgres@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea")
-            .asCompatibleSubstituteFor("postgres"))
-            .withDatabaseName("media_lifecycle")
-            .withUsername("test")
-            .withPassword("test");
-
-    @DynamicPropertySource
-    static void databaseProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
-        registry.add("spring.datasource.username", POSTGRES::getUsername);
-        registry.add("spring.datasource.password", POSTGRES::getPassword);
-        registry.add("spring.datasource.driver-class-name", () -> "org.postgresql.Driver");
+    @TestConfiguration(proxyBeanMethods = false)
+    static class PostgresContainerConfiguration {
+        @Bean
+        @ServiceConnection
+        PostgreSQLContainer<?> mediaLifecyclePostgresContainer() {
+            return new PostgreSQLContainer<>(DockerImageName.parse(
+                    "postgres@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea")
+                    .asCompatibleSubstituteFor("postgres"))
+                    .withDatabaseName("media_lifecycle")
+                    .withUsername("test")
+                    .withPassword("test");
+        }
     }
 
     @Autowired
