@@ -32,6 +32,20 @@ jobs:
           zricethezav/gitleaks@sha256:cdbb7c955abce02001a9f6c9f602fb195b7fadc1e812065883f695d1eeaba854
           git '--log-opts=--all --full-history -m' --redact=100 .
 
+      - name: Set up Node.js 22 for browser-backed backend acceptance tests
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: 2Dto3D_FE/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: 2Dto3D_FE
+        run: npm ci --no-audit --no-fund
+
+      - name: Install Microsoft Edge and Playwright Linux dependencies
+        working-directory: 2Dto3D_FE
+        run: npx playwright install --with-deps msedge
       - name: Set up Java 17
         uses: actions/setup-java@v6
         with:
@@ -57,6 +71,10 @@ jobs:
           sed 's/\r$//' .mvn/wrapper/maven-wrapper.properties |
             grep -Fx -- 'distributionUrl=https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.9/apache-maven-3.9.9-bin.zip'
 
-      - name: Build and run tests
+      - name: Full Backend clean verify
         working-directory: 2Dto3D_BE
         run: bash ./mvnw --batch-mode --no-transfer-progress clean verify
+
+      - name: PayOS browser E2E on disposable PostgreSQL
+        working-directory: 2Dto3D_BE
+        run: bash ./mvnw --batch-mode --no-transfer-progress -Dtest=PayosFinalAcceptanceBrowserE2E test

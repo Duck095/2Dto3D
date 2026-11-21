@@ -24,6 +24,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.core.env.Environment;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.test.context.ActiveProfiles;
@@ -83,7 +84,7 @@ import static org.mockito.Mockito.times;
                 "media.lifecycle.reconciliation-enabled=false",
                 "app.features.admin-product-snapshot-upload.enabled=true",
                 "cloudinary.cloud-name=test-cloud",
-                "media.upload.snapshot-temp-directory=${admin3d.e2e.temp-directory:D:/2Dto3D/.qa-temp/ADMIN3D-INT-E2E-01}/snapshot-spool"
+                "media.upload.snapshot-temp-directory=${admin3d.e2e.temp-directory:${user.dir}/.mvn-target/admin3d-e2e-temp}/snapshot-spool"
         })
 @ActiveProfiles("test")
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
@@ -97,14 +98,15 @@ class Admin3dRealE2ePostgresAcceptanceTest {
     private static final String SECOND_ADMIN_PASSWORD = "E2e-Admin-Second-826!";
     private static final String USER_EMAIL = "user-e2e@2dto3d.invalid";
     private static final String USER_PASSWORD = "E2e-User-Only-826!";
-    private static final Path ROOT = Path.of("D:/2Dto3D");
+    private static final Path BACKEND_ROOT = Path.of(System.getProperty("user.dir")).toAbsolutePath().normalize();
+    private static final Path ROOT = BACKEND_ROOT.getParent();
     private static final Path FE_ROOT = ROOT.resolve("2Dto3D_FE");
     private static final Path EVIDENCE = Path.of(System.getProperty("admin3d.e2e.evidence-directory",
-            ROOT.resolve(".qa-evidence/ADMIN3D-INT-E2E-01/attempt15").toString()));
+            ROOT.resolve(".mvn-target/admin3d-e2e/evidence").toString()));
     private static final Path OUTAGE_EVIDENCE = Path.of(System.getProperty("admin3d.e2e.outage-evidence-directory",
-            ROOT.resolve(".qa-evidence/ADMIN3D-INT-E2E-01-BE-503-01/attempt5").toString()));
+            ROOT.resolve(".mvn-target/admin3d-e2e/outage-evidence").toString()));
     private static final Path TEMP = Path.of(System.getProperty("admin3d.e2e.temp-directory",
-            ROOT.resolve(".qa-temp/ADMIN3D-INT-E2E-01").toString()));
+            BACKEND_ROOT.resolve(".mvn-target/admin3d-e2e-temp").toString())).toAbsolutePath().normalize();
     private static final Path SPOOL = TEMP.resolve("snapshot-spool");
     private static final Path MESH_TEMP = Path.of(System.getProperty("java.io.tmpdir", "."))
             .toAbsolutePath().normalize();
@@ -127,6 +129,7 @@ class Admin3dRealE2ePostgresAcceptanceTest {
         }
     }
 
+    @Autowired private Environment environment;
     @Autowired private JdbcTemplate runtimeJdbc;
     @Autowired private FeatureGateProperties featureProperties;
     @Autowired private DesignerModelUploadService uploadService;
@@ -157,11 +160,23 @@ class Admin3dRealE2ePostgresAcceptanceTest {
             vite.destroy();
             if (!vite.waitFor(5, TimeUnit.SECONDS)) vite.destroyForcibly();
         }
+        verifySnapshotTempPath();
         try (var files = Files.list(SPOOL)) {
             assertThat(files.toList()).as("trusted upload spool is empty").isEmpty();
         }
     }
 
+    private void verifySnapshotTempPath() throws IOException {
+        Path configuredSpool = Path.of(environment.getRequiredProperty("media.upload.snapshot-temp-directory"))
+                .toAbsolutePath().normalize();
+        Path assertedSpool = SPOOL.toAbsolutePath().normalize();
+        assertThat(configuredSpool).as("configured media upload temp matches test spool assertion")
+                .isEqualTo(assertedSpool);
+        Files.createDirectories(EVIDENCE);
+        Files.writeString(EVIDENCE.resolve("snapshot-temp-path.txt"),
+                "configured=" + configuredSpool + System.lineSeparator()
+                        + "asserted=" + assertedSpool + System.lineSeparator());
+    }
     @AfterAll
     static void stopOnlyDisposablePostgres() {
         if (postgres != null && postgres.isRunning()) postgres.stop();
@@ -172,6 +187,7 @@ class Admin3dRealE2ePostgresAcceptanceTest {
         Files.createDirectories(EVIDENCE);
         Files.createDirectories(TEMP);
         Files.createDirectories(SPOOL);
+        verifySnapshotTempPath();
         try (var files = Files.list(SPOOL)) { assertThat(files.toList()).isEmpty(); }
         storedUploads.clear();
         reset(storage);
@@ -322,6 +338,7 @@ class Admin3dRealE2ePostgresAcceptanceTest {
     void adminMeshDatabaseOutageReturnsSanitized503BeforeController() throws Exception {
         Files.createDirectories(OUTAGE_EVIDENCE);
         Files.createDirectories(SPOOL);
+        verifySnapshotTempPath();
         try (var files = Files.list(SPOOL)) { assertThat(files.toList()).isEmpty(); }
         reset(storage);
         doAnswer(invocation -> {
@@ -338,7 +355,8 @@ class Admin3dRealE2ePostgresAcceptanceTest {
                             + intent.publicId() + suffix);
         }).when(storage).upload(any(), any());
 
-        Path acceptedFixture = ROOT.resolve(".qa-evidence/ADMIN3D-INT-E2E-01/attempt15");
+        Path acceptedFixture = Path.of(System.getProperty("admin3d.e2e.fixture-directory", EVIDENCE.toString()));
+        ensureAcceptanceFixtures(acceptedFixture);
         byte[] glb = Files.readAllBytes(acceptedFixture.resolve("fixture.glb"));
         byte[] image = Files.readAllBytes(acceptedFixture.resolve("fixture.png"));
         User admin = User.builder().id(adminId).name("Admin E2E").email(ADMIN_EMAIL)
@@ -559,6 +577,32 @@ class Admin3dRealE2ePostgresAcceptanceTest {
 
     private static int vitePortForSummary;
 
+    private static void ensureAcceptanceFixtures(Path directory) throws IOException {
+        Files.createDirectories(directory);
+        Path glbPath = directory.resolve("fixture.glb");
+        if (!Files.exists(glbPath)) {
+            String gltf = """
+                    {"asset":{"version":"2.0","generator":"2Dto3D isolated acceptance fixture"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":[{"name":"E2E body node","mesh":0}],"meshes":[{"name":"E2E double primitive mesh","primitives":[{"attributes":{"POSITION":0},"mode":4},{"attributes":{"POSITION":0},"mode":4}]}],"buffers":[{"byteLength":36}],"bufferViews":[{"buffer":0,"byteOffset":0,"byteLength":36,"target":34962}],"accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3","min":[-1,-1,0],"max":[1,1,0]}]}
+                    """.strip();
+            byte[] json = gltf.getBytes(StandardCharsets.UTF_8);
+            int jsonLength = (json.length + 3) & ~3;
+            int totalLength = 12 + 8 + jsonLength + 8 + 36;
+            java.nio.ByteBuffer glb = java.nio.ByteBuffer.allocate(totalLength).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+            glb.putInt(0x46546c67).putInt(2).putInt(totalLength);
+            glb.putInt(jsonLength).putInt(0x4e4f534a).put(json);
+            while (glb.position() < 20 + jsonLength) glb.put((byte) 0x20);
+            glb.putInt(36).putInt(0x004e4942);
+            float[][] vertices = {{-1f, -1f, 0f}, {1f, -1f, 0f}, {0f, 1f, 0f}};
+            for (float[] vertex : vertices) for (float coordinate : vertex) glb.putFloat(coordinate);
+            Files.write(glbPath, glb.array());
+        }
+        Path imagePath = directory.resolve("fixture.png");
+        if (!Files.exists(imagePath)) {
+            BufferedImage image = new BufferedImage(2, 2, BufferedImage.TYPE_INT_ARGB);
+            for (int y = 0; y < 2; y++) for (int x = 0; x < 2; x++) image.setRGB(x, y, 0xfff0b450);
+            if (!ImageIO.write(image, "png", imagePath.toFile())) throw new IOException("PNG fixture writer unavailable");
+        }
+    }
     private static Set<Path> meshSpools() throws IOException {
         try (var files = Files.list(MESH_TEMP)) {
             return files.filter(path -> path.getFileName().toString().startsWith("admin-mesh-request-"))

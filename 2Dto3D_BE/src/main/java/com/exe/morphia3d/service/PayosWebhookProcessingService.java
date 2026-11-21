@@ -8,17 +8,13 @@ import com.exe.morphia3d.enums.PaymentProvider;
 import com.exe.morphia3d.service.payment.payos.PayosPaymentPersistenceService;
 import com.exe.morphia3d.service.payment.payos.PayosProtocol;
 import com.exe.morphia3d.service.payment.payos.PayosVerificationException;
-import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 
 import java.util.Map;
 import java.util.Objects;
 
 /** Internal application boundary for verified payOS webhook events. No HTTP controller exposes this service. */
-@Service
-@ConditionalOnBean(PayosPaymentPersistenceService.class)
 public class PayosWebhookProcessingService {
     private final Map<String, String> checksumKeysByChannel;
     private final PayosPaymentPersistenceService persistence;

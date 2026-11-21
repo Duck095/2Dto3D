@@ -24,7 +24,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest(classes = Morphia3dApplication.class,
-        properties = "spring.datasource.url=jdbc:h2:mem:product_security;DB_CLOSE_DELAY=-1")
+        properties = "spring.datasource.url=jdbc:h2:mem:product_security;DB_CLOSE_DELAY=-1;INIT=CREATE DOMAIN IF NOT EXISTS JSONB AS JSON")
 @ActiveProfiles("test")
 @TestPropertySource(properties = "app.features.ai.enabled=true")
 @Transactional
