@@ -40,6 +40,7 @@ import javax.sql.DataSource;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.nio.ByteBuffer;
@@ -83,16 +84,14 @@ import static org.mockito.Mockito.verifyNoInteractions;
                 "spring.flyway.enabled=false",
                 "media.lifecycle.reconciliation-enabled=false",
                 "app.features.admin-product-snapshot-upload.enabled=true",
-                "cloudinary.cloud-name=test-cloud",
-                "media.upload.snapshot-temp-directory=D:/2Dto3D/2Dto3D_BE/.qa-temp/ADMIN3D-BE-HTTP-01/snapshot-spool"
+                "cloudinary.cloud-name=test-cloud"
         })
 @ActiveProfiles("test")
 class AdminProductMeshRealHttpPostgresAcceptanceTest {
     private static final String IMAGE = "postgres@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea";
     private static final String MIGRATOR_PASSWORD = "admin3d_http_migrator_test_only";
     private static final String RUNTIME_PASSWORD = "admin3d_http_runtime_test_only";
-    private static final Path SPOOL_DIRECTORY = Path.of(
-            "D:/2Dto3D/2Dto3D_BE/.qa-temp/ADMIN3D-BE-HTTP-01/snapshot-spool");
+    private static final Path SPOOL_DIRECTORY = testOwnedSpoolDirectory();
     private static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>(IMAGE)
             .withDatabaseName("admin3d_real_http_test")
             .withUsername("postgres")
@@ -109,6 +108,7 @@ class AdminProductMeshRealHttpPostgresAcceptanceTest {
 
     static {
         try {
+            verifyTestOwnedSpoolDirectory();
             prepareDisposablePostgresAndFixtures();
         } catch (Exception exception) {
             throw new ExceptionInInitializerError(exception);
@@ -123,6 +123,7 @@ class AdminProductMeshRealHttpPostgresAcceptanceTest {
 
     @BeforeEach
     void prepareFakeStorageAndPrivateSpoolDirectory() throws Exception {
+        verifyTestOwnedSpoolDirectory();
         Files.createDirectories(SPOOL_DIRECTORY);
         try (var entries = Files.list(SPOOL_DIRECTORY)) {
             assertThat(entries.toList()).isEmpty();
@@ -197,6 +198,51 @@ class AdminProductMeshRealHttpPostgresAcceptanceTest {
         registry.add("spring.datasource.username", () -> "app_runtime");
         registry.add("spring.datasource.password", () -> RUNTIME_PASSWORD);
         registry.add("spring.datasource.driver-class-name", () -> "org.postgresql.Driver");
+        registry.add("media.upload.snapshot-temp-directory", SPOOL_DIRECTORY::toString);
+    }
+
+    private static Path testOwnedSpoolDirectory() {
+        try {
+            return Path.of(System.getProperty("java.io.tmpdir")).toRealPath()
+                    .resolve(Path.of("2dto3d-test-spool", "admin-product-mesh-real-http",
+                            UUID.randomUUID().toString(), "snapshot-spool"))
+                    .toAbsolutePath().normalize();
+        } catch (IOException failure) {
+            throw new IllegalStateException("Could not resolve the OS temp directory for the acceptance spool", failure);
+        }
+    }
+
+    private static void verifyTestOwnedSpoolDirectory() throws IOException {
+        Path tempRoot = Path.of(System.getProperty("java.io.tmpdir")).toRealPath();
+        Path spool = SPOOL_DIRECTORY.toAbsolutePath().normalize();
+        if (!spool.equals(SPOOL_DIRECTORY) || !spool.startsWith(tempRoot) || spool.equals(tempRoot)) {
+            throw new IllegalStateException("Acceptance spool must be a normalized child of the OS temp directory");
+        }
+
+        Path current = tempRoot;
+        for (Path segment : tempRoot.relativize(spool)) {
+            current = current.resolve(segment);
+            if (Files.isSymbolicLink(current)) {
+                throw new IllegalStateException("Acceptance spool path must not traverse a symbolic link");
+            }
+        }
+
+        Path repositoryRoot = findRepositoryRoot();
+        Path workspaceParent = repositoryRoot.getParent();
+        if (workspaceParent != null && spool.startsWith(workspaceParent.toRealPath())) {
+            throw new IllegalStateException("Acceptance spool must be outside the repository workspace");
+        }
+    }
+
+    private static Path findRepositoryRoot() throws IOException {
+        Path current = Path.of(System.getProperty("user.dir")).toRealPath();
+        while (current != null) {
+            if (Files.exists(current.resolve(".git"))) {
+                return current;
+            }
+            current = current.getParent();
+        }
+        throw new IllegalStateException("Could not locate the Git root for the acceptance test");
     }
 
     @Test
