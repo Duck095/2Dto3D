@@ -22,6 +22,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
@@ -78,7 +79,7 @@ class MediaAssetLifecycleServiceTest {
         MediaUploadIntent activeUpload = lifecycle.claimUpload(operation, activeId);
         lifecycle.refreshUploadLease(activeUpload);
         jdbc.update("UPDATE media_asset SET created_at = ?, updated_at = ? WHERE operation_id = ?",
-                Instant.now().minusSeconds(600), Instant.now().minusSeconds(600), operation.operationId());
+                Timestamp.from(Instant.now().minusSeconds(600)), Timestamp.from(Instant.now().minusSeconds(600)), operation.operationId());
 
         assertThat(lifecycle.recoverStaleUploadIntents()).isZero();
         assertThat(findState(operation.mediaAssetIds().get(1))).isEqualTo(MediaAssetState.PENDING_UPLOAD);
@@ -94,7 +95,7 @@ class MediaAssetLifecycleServiceTest {
         MediaUploadIntent upload = lifecycle.claimUpload(operation, operation.mediaAssetIds().get(0));
         lifecycle.recordUpload(upload, result(upload));
         jdbc.update("UPDATE media_asset SET lease_until = ?, created_at = ?, updated_at = ? WHERE operation_id = ?",
-                Instant.now().minusSeconds(600), Instant.now().minusSeconds(600), Instant.now().minusSeconds(600),
+                Timestamp.from(Instant.now().minusSeconds(600)), Timestamp.from(Instant.now().minusSeconds(600)), Timestamp.from(Instant.now().minusSeconds(600)),
                 operation.operationId());
 
         assertThat(lifecycle.recoverStaleUploadIntents()).isEqualTo(2);
@@ -111,11 +112,11 @@ class MediaAssetLifecycleServiceTest {
                 new MediaAssetIntentSpec(MediaKind.MODEL_3D, "glb", 12L),
                 new MediaAssetIntentSpec(MediaKind.IMAGE, "png", 3L));
         jdbc.update("UPDATE media_asset SET lease_until = ?, created_at = ?, updated_at = ? WHERE operation_id = ?",
-                Instant.now().minusSeconds(600), Instant.now().minusSeconds(600), Instant.now().minusSeconds(600),
+                Timestamp.from(Instant.now().minusSeconds(600)), Timestamp.from(Instant.now().minusSeconds(600)), Timestamp.from(Instant.now().minusSeconds(600)),
                 operation.operationId());
         lifecycle.recoverStaleUploadIntents();
         jdbc.update("UPDATE media_asset SET lease_until = ? WHERE operation_id = ?",
-                Instant.now().minusSeconds(600), operation.operationId());
+                Timestamp.from(Instant.now().minusSeconds(600)), operation.operationId());
         assertThat(reconciler.reconcileOnce()).isEqualTo(2);
         assertThat(findStates(operation.mediaAssetIds())).containsOnly(MediaAssetState.DELETED);
         assertThat(mediaStorage.deleted()).hasSize(2);
@@ -133,7 +134,7 @@ class MediaAssetLifecycleServiceTest {
             long eligibleId = createSingleAsset(eligibleOperationId, MediaKind.IMAGE, "webp", 4L);
             requestCleanup(eligibleOperationId, List.of(eligibleId));
             jdbc.update("UPDATE media_asset SET lease_until = ? WHERE id = ?",
-                    Instant.now().minusSeconds(1), eligibleId);
+                    Timestamp.from(Instant.now().minusSeconds(1)), eligibleId);
 
             assertThat(lifecycle.cleanupCandidateIds()).containsExactly(eligibleId);
             assertThat(lifecycle.claimCleanup(eligibleId, "eligible-worker")).isNotNull();
@@ -175,7 +176,7 @@ class MediaAssetLifecycleServiceTest {
         long id = createSingleAsset(UUID.randomUUID(), MediaKind.MODEL_3D, "glb", 12L);
         MediaUploadIntent claim = claimSingleAsset(id);
         Instant oldLease = assets.findById(id).orElseThrow().getLeaseUntil();
-        jdbc.update("UPDATE media_asset SET lease_until = ? WHERE id = ?", oldLease.minusSeconds(30), id);
+        jdbc.update("UPDATE media_asset SET lease_until = ? WHERE id = ?", Timestamp.from(oldLease.minusSeconds(30)), id);
 
         // Ensure the system clock advances so the newly calculated lease is strictly later than the old one.
         Thread.sleep(5);
@@ -194,7 +195,7 @@ class MediaAssetLifecycleServiceTest {
 
         assertThat(lifecycle.claimCleanup(id, "worker-early")).isNull();
         jdbc.update("UPDATE media_asset SET lease_until = ? WHERE id = ?",
-                Instant.now().minusSeconds(600), id);
+                Timestamp.from(Instant.now().minusSeconds(600)), id);
 
         MediaAssetCleanupLease first = lifecycle.claimCleanup(id, "worker-first");
         MediaAssetCleanupLease second = lifecycle.claimCleanup(id, "worker-second");
@@ -215,7 +216,7 @@ class MediaAssetLifecycleServiceTest {
         modelRepository.saveAndFlush(model);
         // Simulate an inconsistent historical row; destructive reconciliation must still fail closed.
         jdbc.update("UPDATE media_asset SET state = 'CLEANUP_PENDING', lease_until = ? WHERE id = ?",
-                Instant.now().minusSeconds(600), id);
+                Timestamp.from(Instant.now().minusSeconds(600)), id);
 
         assertThat(lifecycle.claimCleanup(id, "worker-ref")).isNull();
     }
@@ -234,7 +235,7 @@ class MediaAssetLifecycleServiceTest {
         product.setImages(List.of(image));
         modelRepository.saveAndFlush(product);
         jdbc.update("UPDATE media_asset SET state='CLEANUP_PENDING',lease_until=? WHERE id=?",
-                Instant.now().minusSeconds(1), id);
+                Timestamp.from(Instant.now().minusSeconds(1)), id);
 
         assertThat(lifecycle.claimCleanup(id, "worker-image-reference")).isNull();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM model_images WHERE media_asset_id=?",
@@ -251,7 +252,7 @@ class MediaAssetLifecycleServiceTest {
         assertThat(requestCleanup(operationId, List.of(id))).isZero();
         jdbc.update("UPDATE media_asset SET lease_until = ?, provider_asset_id = NULL, " +
                         "updated_at = ? WHERE id = ?",
-                Instant.now().minusSeconds(600), Instant.now().minusSeconds(600), id);
+                Timestamp.from(Instant.now().minusSeconds(600)), Timestamp.from(Instant.now().minusSeconds(600)), id);
 
         assertThat(lifecycle.recoverStaleUploadIntents()).isEqualTo(1);
         MediaAsset recovered = assets.findById(id).orElseThrow();
@@ -267,7 +268,7 @@ class MediaAssetLifecycleServiceTest {
         UUID operationId = UUID.randomUUID();
         long id = createSingleAsset(operationId, MediaKind.IMAGE, "png", 3L);
         requestCleanup(operationId, List.of(id));
-        jdbc.update("UPDATE media_asset SET lease_until = ? WHERE id = ?", Instant.now().minusSeconds(600), id);
+        jdbc.update("UPDATE media_asset SET lease_until = ? WHERE id = ?", Timestamp.from(Instant.now().minusSeconds(600)), id);
         MediaAssetCleanupLease lease = lifecycle.claimCleanup(id, "worker-safe");
 
         assertThat(lease).isNotNull();
@@ -284,7 +285,7 @@ class MediaAssetLifecycleServiceTest {
         MediaUploadIntent upload = claimSingleAsset(id);
         lifecycle.recordUpload(upload, result(upload));
         assertThat(requestCleanup(operationId, List.of(id))).isEqualTo(1);
-        jdbc.update("UPDATE media_asset SET lease_until = ? WHERE id = ?", Instant.now().minusSeconds(600), id);
+        jdbc.update("UPDATE media_asset SET lease_until = ? WHERE id = ?", Timestamp.from(Instant.now().minusSeconds(600)), id);
 
         MediaAssetCleanupLease cleanup = lifecycle.claimCleanup(id, "worker-delete");
         lifecycle.finishCleanup(cleanup, DeleteResult.DELETED);
@@ -300,9 +301,9 @@ class MediaAssetLifecycleServiceTest {
         UUID operationId = UUID.randomUUID();
         long id = createSingleAsset(operationId, MediaKind.IMAGE, "png", 3L);
         requestCleanup(operationId, List.of(id));
-        jdbc.update("UPDATE media_asset SET lease_until = ? WHERE id = ?", Instant.now().minusSeconds(600), id);
+        jdbc.update("UPDATE media_asset SET lease_until = ? WHERE id = ?", Timestamp.from(Instant.now().minusSeconds(600)), id);
         MediaAssetCleanupLease lease = lifecycle.claimCleanup(id, "worker-expired");
-        jdbc.update("UPDATE media_asset SET lease_until = ? WHERE id = ?", Instant.now().minusSeconds(1), id);
+        jdbc.update("UPDATE media_asset SET lease_until = ? WHERE id = ?", Timestamp.from(Instant.now().minusSeconds(1)), id);
 
         assertThatThrownBy(() -> lifecycle.finishCleanup(lease, DeleteResult.DELETED))
                 .isInstanceOf(IllegalStateException.class);
@@ -329,7 +330,7 @@ class MediaAssetLifecycleServiceTest {
         UUID operationId = UUID.randomUUID();
         long id = createSingleAsset(operationId, MediaKind.IMAGE, "png", 3L);
         requestCleanup(operationId, List.of(id));
-        jdbc.update("UPDATE media_asset SET lease_until = ? WHERE id = ?", Instant.now().minusSeconds(600), id);
+        jdbc.update("UPDATE media_asset SET lease_until = ? WHERE id = ?", Timestamp.from(Instant.now().minusSeconds(600)), id);
         MediaAssetCleanupLease lease = lifecycle.claimCleanup(id, "worker-failure");
 
         lifecycle.failCleanup(lease, "provider response contained credentials");
@@ -339,12 +340,12 @@ class MediaAssetLifecycleServiceTest {
         assertThat(failed.getRetryCount()).isEqualTo(1);
         assertThat(failed.getLastErrorCode()).isEqualTo("PROVIDER_FAILURE");
         assertThat(lifecycle.claimCleanup(id, "worker-too-soon")).isNull();
-        jdbc.update("UPDATE media_asset SET lease_until = ? WHERE id = ?", Instant.now().minusSeconds(600), id);
+        jdbc.update("UPDATE media_asset SET lease_until = ? WHERE id = ?", Timestamp.from(Instant.now().minusSeconds(600)), id);
         MediaAssetCleanupLease next = lifecycle.claimCleanup(id, "worker-after-backoff");
         for (int attempt = 2; attempt <= 8; attempt++) {
             assertThat(next).as("retry %s", attempt).isNotNull();
             lifecycle.failCleanup(next, "PROVIDER_UNAVAILABLE");
-            jdbc.update("UPDATE media_asset SET lease_until = ? WHERE id = ?", Instant.now().minusSeconds(10_000), id);
+            jdbc.update("UPDATE media_asset SET lease_until = ? WHERE id = ?", Timestamp.from(Instant.now().minusSeconds(10_000)), id);
             next = lifecycle.claimCleanup(id, "worker-retry-" + attempt);
         }
         assertThat(next).isNull();
