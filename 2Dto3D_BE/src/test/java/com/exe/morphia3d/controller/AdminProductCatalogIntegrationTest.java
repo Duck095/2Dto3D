@@ -371,6 +371,24 @@ class AdminProductCatalogIntegrationTest {
     }
 
     @Test
+    void lookingUpUnknownColorReturnsNotFoundInsteadOfServerError() throws Exception {
+        mvc.perform(get("/api/colors/{colorName}", "AT missing color")
+                        .with(user("catalog-admin").roles("ADMIN")))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void creatingMaterialWithUnknownColorIdReturnsNotFoundInsteadOfServerError() throws Exception {
+        mvc.perform(post("/api/materials/create")
+                        .with(user("catalog-admin").roles("ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"AT missing color reference\",\"type\":\"PLA\","
+                                + "\"pricePerGram\":0.05,\"stockQuantity\":100,\"unit\":\"g\","
+                                + "\"colors\":[{\"colorId\":2147483647,\"quantity\":1}]}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void malformedAdminProductPatchReturns400WithoutMutationOrUploadSpecificError() throws Exception {
         Model3d product = savePublishedProductWithMediaReferences();
         String filePathBefore = jdbc.queryForObject("select file_path_3d from model_3d where model_id = ?",

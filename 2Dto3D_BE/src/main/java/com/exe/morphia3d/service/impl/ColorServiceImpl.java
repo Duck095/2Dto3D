@@ -54,7 +54,7 @@ public class ColorServiceImpl implements ColorService {
         Color color = colorRepository.findByName(colorName);
 
         if (color == null) {
-            throw new RuntimeException("Color not found");
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Color not found");
         }
 
         return colorMapper.toResponse(color);
