@@ -10,6 +10,7 @@ import com.exe.morphia3d.repository.Model3dRepository;
 import com.exe.morphia3d.repository.ModelImageRepository;
 import com.exe.morphia3d.repository.ProductGlbStructureSnapshotRepository;
 import com.exe.morphia3d.repository.ProductMeshConfigurationRevisionRepository;
+import com.exe.morphia3d.repository.ProductPrintAssetRepository;
 import com.exe.morphia3d.service.MediaAssetLifecycleService;
 import com.exe.morphia3d.service.MediaLifecycleProperties;
 import com.exe.morphia3d.service.MediaStorageProperties;
@@ -93,6 +94,7 @@ class QaMediaBeanWiringTest {
         @Bean ProductMeshConfigurationRevisionRepository meshRevisions() {
             return mock(ProductMeshConfigurationRevisionRepository.class);
         }
+        @Bean ProductPrintAssetRepository printAssets() { return mock(ProductPrintAssetRepository.class); }
         @Bean Clock clock() { return Clock.systemUTC(); }
         @Bean EntityManagerFactory entityManagerFactory() { return mock(EntityManagerFactory.class); }
         @Bean EntityManager entityManager() { return mock(EntityManager.class); }

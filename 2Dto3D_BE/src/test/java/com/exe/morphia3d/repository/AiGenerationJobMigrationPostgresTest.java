@@ -112,7 +112,7 @@ class AiGenerationJobMigrationPostgresTest {
         PostgresTestRoleProvisioning.grantSnapshotReferencePrivileges(jdbc);
 
         Flyway current = flyway(dataSource, null);
-        assertThat(current.migrate().migrationsExecuted).isEqualTo(6);
+        assertThat(current.migrate().migrationsExecuted).isEqualTo(7);
         current.validate();
         assertThat(jdbc.queryForObject("""
                 SELECT quality FROM ai_generation_jobs WHERE generation_job_id = ?

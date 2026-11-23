@@ -26,6 +26,8 @@ class DesignProjectExceptionHandlerTest {
                 new Expected(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "DESIGN_MEDIA_UNSUPPORTED_MIME_TYPE"));
         expected.put(MediaValidationException.Reason.INVALID_GLB,
                 new Expected(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "DESIGN_MEDIA_INVALID_GLB"));
+        expected.put(MediaValidationException.Reason.INVALID_3MF,
+                new Expected(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "DESIGN_MEDIA_INVALID_3MF"));
         expected.put(MediaValidationException.Reason.TOO_LARGE,
                 new Expected(HttpStatus.PAYLOAD_TOO_LARGE, "DESIGN_MEDIA_TOO_LARGE"));
         expected.put(MediaValidationException.Reason.TOO_MANY_IMAGES,

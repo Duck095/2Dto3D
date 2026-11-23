@@ -311,14 +311,14 @@ class PostgresV1V2SchemaIntegrationTest {
         assertThat(repeatedMigrationsExecuted).isZero();
         assertThat(historicalMigrationVersions).containsExactly("1", "2", "3");
         assertThat(currentMigrationsExecuted).isEqualTo(11);
-        assertThat(postV14MigrationsExecuted).isEqualTo(6);
-        assertThat(currentMigrationVersions).containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20");
+        assertThat(postV14MigrationsExecuted).isEqualTo(7);
+        assertThat(currentMigrationVersions).containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21");
         assertThat(baselineRows).isZero();
 
         List<Map<String, Object>> history = jdbc.queryForList(
                 "SELECT version, type, success FROM flyway_schema_history ORDER BY installed_rank");
         assertThat(history).extracting(row -> row.get("version"))
-                .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20");
+                .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21");
         assertThat(history).allSatisfy(row -> {
             assertThat(row.get("type")).isEqualTo("SQL");
             assertThat(row.get("success")).isEqualTo(true);

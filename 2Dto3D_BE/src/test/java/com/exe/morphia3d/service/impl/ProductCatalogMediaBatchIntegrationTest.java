@@ -85,8 +85,8 @@ class ProductCatalogMediaBatchIntegrationTest {
         assertThat(detail.model3dUrl()).startsWith("https://res.cloudinary.com/test-cloud/raw/upload/v1/");
         long detailQueryCount = statistics.getPrepareStatementCount();
         assertThat(detailQueryCount)
-                .as("cold product row, model media, image batch, and parts queries")
-                .isEqualTo(3);
+                .as("cold product row, model media, image batch, parts, and mesh appearance queries")
+                .isEqualTo(4);
     }
 
     private MediaAsset attachedAsset(UUID operationId, MediaKind kind, String format, String resourceType) {

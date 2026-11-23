@@ -116,7 +116,7 @@ class MediaUploadExceptionHandlerTest {
                 .thenThrow(new MediaValidationException(MediaValidationException.Reason.INVALID_GLB));
         adminUpload().andExpect(status().isUnsupportedMediaType())
                 .andExpect(jsonPath("$.message").value(
-                        "Only supported JPEG, PNG, WebP, and GLB content is accepted"));
+                        "Only supported image, GLB, and 3MF content is accepted"));
 
         doThrow(new MediaValidationException(MediaValidationException.Reason.TOO_LARGE))
                 .when(uploadService).create(any(), any(), any(), any());
