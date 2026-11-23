@@ -14,6 +14,10 @@
 .joy-detail__media-empty strong { color: var(--joy-ink); font-size: 14px; }
 .joy-detail__media-empty small { color: #94899a; font-size: 10px; }
 .joy-detail__model-viewer { width: 100%; height: 100%; min-height: 400px; }
+.joy-detail__mesh-colors { display: grid; gap: .65rem; margin-top: .85rem; padding: .85rem 1rem; border: 1px solid #eadde5; border-radius: 1rem; background: #fffafd; }
+.joy-detail__mesh-colors h2 { margin: 0; color: var(--joy-ink); font-size: .95rem; }
+.joy-detail__mesh-colors label { display: grid; grid-template-columns: minmax(0, 1fr) minmax(8rem, .55fr); align-items: center; gap: .75rem; color: #5b5060; font-size: .8rem; }
+.joy-detail__mesh-colors select { min-height: 2.65rem; padding: .55rem .7rem; border: 1px solid #ddd0dd; border-radius: .65rem; background: #fff; color: #30263a; font: inherit; }
 .joy-detail__loading { color: #7b6a88; font-size: 12px; }
 .joy-detail__media-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; margin-top: 13px; }
 .joy-detail__media-controls > button { min-width: 52px; min-height: 46px; overflow: hidden; border: 1px solid #e8dfe9; border-radius: 12px; background: white; color: var(--joy-ink); cursor: pointer; }
@@ -96,6 +100,7 @@
   .joy-detail__top { grid-template-columns: 1fr; gap: 22px; padding-top: 4px; padding-bottom: 42px; }
   .joy-detail__stage { min-height: 280px; aspect-ratio: 1 / .86; border-radius: 22px; }
   .joy-detail__model-viewer { min-height: 320px; }
+  .joy-detail__mesh-colors label { grid-template-columns: minmax(0, 1fr); }
   .joy-detail__summary { padding: 0; }
   .joy-detail__summary h1 { font-size: clamp(29px,8vw,42px); }
   .joy-detail__purchase { grid-template-columns: auto 1fr; }

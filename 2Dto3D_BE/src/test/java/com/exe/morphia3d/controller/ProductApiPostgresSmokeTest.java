@@ -198,6 +198,8 @@ class ProductApiPostgresSmokeTest {
         assertThat(activeDetail.path("model3dUrl").asText()).isEqualTo(
                 "https://res.cloudinary.com/test-cloud/raw/upload/v42/product-media/models/"
                         + operationId + "/" + assetId + ".glb");
+        assertThat(activeDetail.path("modelMeshAppearances").isArray()).isTrue();
+        assertThat(activeDetail.path("modelMeshAppearances")).isEmpty();
         getJson("/api/products/" + pending.getId(), HttpStatus.NOT_FOUND);
 
         jdbc.update("UPDATE model_3d SET media_asset_id=NULL WHERE model_id=?", active.getId());

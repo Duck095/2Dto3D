@@ -36,6 +36,14 @@ export function getApprovedProductMedia(product) {
     };
 }
 
+export function selectAllowedMeshColor(appearance, requestedColorId) {
+    if (!appearance?.customizable || !Array.isArray(appearance.allowedColors)) return null;
+    const allowed = appearance.allowedColors;
+    const requested = allowed.find(color => String(color?.id) === String(requestedColorId));
+    if (requested) return requested;
+    return allowed.find(color => String(color?.id) === String(appearance.defaultColor?.id)) || null;
+}
+
 export function requiresProductDetailSelection(product) {
     return (Array.isArray(product?.purchaseOptions) && product.purchaseOptions.length > 1)
         || (Array.isArray(product?.materials) && product.materials.length > 1);

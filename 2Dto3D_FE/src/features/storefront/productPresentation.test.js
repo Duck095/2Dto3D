@@ -8,12 +8,21 @@ import {
     isReadyForSale,
     requiresProductDetailSelection,
     resolveStorefrontPricing,
+    selectAllowedMeshColor,
 } from './productPresentation.js';
 
 const fixtures = [
     { id: 11, visibility: 'public-approved', title: 'Fixture charm' },
     { id: 12, visibility: 'internal-only', title: 'Internal fixture' },
 ];
+
+test('mesh color selections resolve only exact allowlisted colors and preserve the configured default', () => {
+    const appearance = { customizable: true, defaultColor: { id: 8, name: 'Ocean', hexCode: '#123456' },
+        allowedColors: [{ id: 8, name: 'Ocean', hexCode: '#123456' }, { id: 9, name: 'Sky', hexCode: '#ABCDEF' }] };
+    assert.equal(selectAllowedMeshColor(appearance, 9).id, 9);
+    assert.equal(selectAllowedMeshColor(appearance, 99).id, 8);
+    assert.equal(selectAllowedMeshColor({ ...appearance, customizable: false }, 9), null);
+});
 
 test('public product list excludes internal and unapproved fixtures', () => {
     assert.deepEqual(getPublicProducts(fixtures).map(product => product.id), [11]);

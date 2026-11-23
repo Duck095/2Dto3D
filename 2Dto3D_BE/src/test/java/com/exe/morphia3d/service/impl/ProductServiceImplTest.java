@@ -5,6 +5,12 @@ import com.exe.morphia3d.dto.response.ProductDetailResponse;
 import com.exe.morphia3d.entity.MediaAsset;
 import com.exe.morphia3d.entity.Model3d;
 import com.exe.morphia3d.entity.ModelImage;
+import com.exe.morphia3d.entity.Material;
+import com.exe.morphia3d.entity.MaterialColor;
+import com.exe.morphia3d.entity.MaterialColorId;
+import com.exe.morphia3d.entity.Color;
+import com.exe.morphia3d.entity.ProductGlbStructureSnapshot;
+import com.exe.morphia3d.entity.ProductMeshConfigurationRevision;
 import com.exe.morphia3d.enums.MediaAssetState;
 import com.exe.morphia3d.enums.MediaKind;
 import com.exe.morphia3d.enums.MediaProvider;
@@ -13,6 +19,10 @@ import com.exe.morphia3d.enums.ModelType;
 import com.exe.morphia3d.repository.Model3dRepository;
 import com.exe.morphia3d.repository.ModelImageRepository;
 import com.exe.morphia3d.repository.ModelPartRepository;
+import com.exe.morphia3d.repository.MaterialColorRepository;
+import com.exe.morphia3d.repository.MaterialRepository;
+import com.exe.morphia3d.repository.ProductGlbStructureSnapshotRepository;
+import com.exe.morphia3d.repository.ProductMeshConfigurationRevisionRepository;
 import com.exe.morphia3d.service.MediaUrlResolver;
 import com.exe.morphia3d.utils.ModelUrlResolver;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,6 +36,10 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
+import java.time.Instant;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.exe.morphia3d.service.glb.GlbStructure;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -43,6 +57,10 @@ class ProductServiceImplTest {
     private ModelPartRepository partRepository;
     private ModelUrlResolver modelUrlResolver;
     private MediaUrlResolver mediaUrlResolver;
+    private ProductGlbStructureSnapshotRepository structureSnapshots;
+    private ProductMeshConfigurationRevisionRepository meshConfigurations;
+    private MaterialRepository materialRepository;
+    private MaterialColorRepository materialColorRepository;
     private ProductServiceImpl productService;
 
     @BeforeEach
@@ -52,8 +70,13 @@ class ProductServiceImplTest {
         partRepository = mock(ModelPartRepository.class);
         modelUrlResolver = mock(ModelUrlResolver.class);
         mediaUrlResolver = mock(MediaUrlResolver.class);
+        structureSnapshots = mock(ProductGlbStructureSnapshotRepository.class);
+        meshConfigurations = mock(ProductMeshConfigurationRevisionRepository.class);
+        materialRepository = mock(MaterialRepository.class);
+        materialColorRepository = mock(MaterialColorRepository.class);
         productService = new ProductServiceImpl(modelRepository, imageRepository, partRepository,
-                modelUrlResolver, mediaUrlResolver, "https://media.example/image/upload");
+                modelUrlResolver, mediaUrlResolver, structureSnapshots, meshConfigurations,
+                materialRepository, materialColorRepository, "https://media.example/image/upload");
     }
 
     @Test
@@ -222,6 +245,63 @@ class ProductServiceImplTest {
         assertThat(response.model3dUrl()).isNull();
         assertThat(response.images().get(0).url()).isNull();
         verifyNoInteractions(modelUrlResolver);
+    }
+
+    @Test
+    void publicDetailProjectsOnlyCurrentSnapshotOccurrenceAndMaterialAllowedColors() {
+        int productId = 22;
+        long assetId = 220L;
+        UUID snapshotId = UUID.randomUUID();
+        Model3d product = model(productId, "Configured product");
+        MediaAsset asset = mediaAsset(assetId, MediaKind.MODEL_3D, "glb", "raw");
+        product.setMediaAsset(asset);
+        String safeUrl = "https://res.cloudinary.com/test-cloud/raw/upload/v1/" + asset.getPublicId();
+        when(modelRepository.findByIdAndSourceTypeAndStatus(productId, ModelType.DESIGNER_MODEL, ModelStatus.ACTIVE))
+                .thenReturn(Optional.of(product));
+        when(imageRepository.findByModel_IdOrderByIsPrimaryDescIdAsc(productId)).thenReturn(List.of());
+        when(partRepository.findByModel_IdOrderByIdAsc(productId)).thenReturn(List.of());
+        when(mediaUrlResolver.resolve(asset, MediaKind.MODEL_3D)).thenReturn(safeUrl);
+
+        GlbStructure structure = new GlbStructure(0,
+                List.of(new GlbStructure.Scene(0, "Scene", List.of(0))),
+                List.of(new GlbStructure.Node(0, "Body", 0, List.of(), List.of(0))),
+                List.of(new GlbStructure.Mesh(0, "BodyMesh", List.of(new GlbStructure.Primitive(0, 0, List.of("POSITION"), List.of())))),
+                List.of(new GlbStructure.Material(0, "Original", List.of())), List.of(), List.of(),
+                List.of(new GlbStructure.PrimitiveOccurrence(0, 0, 0, "Body", 0)));
+        ProductGlbStructureSnapshot snapshot = new ProductGlbStructureSnapshot(snapshotId, productId, assetId, 1L,
+                ProductGlbStructureSnapshot.CURRENT_PARSER_VERSION,
+                ProductGlbStructureSnapshot.validatedStructureDocument(
+                        ProductGlbStructureSnapshot.CURRENT_PARSER_VERSION, structure), Instant.now(), 1);
+        when(structureSnapshots.findFirstByProductIdAndMediaAssetIdOrderBySnapshotRevisionDesc(productId, assetId))
+                .thenReturn(Optional.of(snapshot));
+
+        ObjectMapper mapper = new ObjectMapper();
+        var configuration = mapper.createObjectNode().put("schemaVersion", 1);
+        var meshes = configuration.putArray("meshes");
+        meshes.addObject().put("nodeIndex", 0).put("meshIndex", 0).put("primitiveIndex", 0)
+                .put("customizable", true).put("defaultColorId", 31).putArray("allowedColorIds").add(31).add(32);
+        ProductMeshConfigurationRevision revision = new ProductMeshConfigurationRevision(UUID.randomUUID(), productId,
+                assetId, snapshotId, 1L, 7, configuration, Instant.now(), 1);
+        when(meshConfigurations.findFirstByProductIdAndMediaAssetIdAndStructureSnapshotIdOrderByConfigRevisionDesc(
+                productId, assetId, snapshotId)).thenReturn(Optional.of(revision));
+
+        Material material = Material.builder().id(7).name("PLA blue").build();
+        Color defaultColor = Color.builder().id(31).name("Ocean blue").hexCode("#123456").build();
+        Color allowedColor = Color.builder().id(32).name("Sky blue").hexCode("#ABCDEF").build();
+        when(materialRepository.findById(7)).thenReturn(Optional.of(material));
+        when(materialColorRepository.findAllByMaterial_Id(7)).thenReturn(List.of(
+                MaterialColor.builder().id(new MaterialColorId(7, 31)).material(material).color(defaultColor).quantity(0d).build(),
+                MaterialColor.builder().id(new MaterialColorId(7, 32)).material(material).color(allowedColor).quantity(0d).build()));
+
+        var response = productService.getProduct(productId);
+
+        assertThat(response.model3dUrl()).isEqualTo(safeUrl);
+        assertThat(response.modelMeshAppearances()).containsExactly(new com.exe.morphia3d.dto.response.ProductMeshAppearanceResponse(
+                0, 0, 0, true,
+                new com.exe.morphia3d.dto.response.ProductMeshAppearanceResponse.ProductMeshColorResponse(31, "Ocean blue", "#123456"),
+                List.of(new com.exe.morphia3d.dto.response.ProductMeshAppearanceResponse.ProductMeshColorResponse(31, "Ocean blue", "#123456"),
+                        new com.exe.morphia3d.dto.response.ProductMeshAppearanceResponse.ProductMeshColorResponse(32, "Sky blue", "#ABCDEF")),
+                7, "PLA blue"));
     }
 
     @Test

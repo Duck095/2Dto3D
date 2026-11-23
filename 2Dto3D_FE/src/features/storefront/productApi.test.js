@@ -63,6 +63,16 @@ test('adapts only detail media and model fields actually supplied by the API', (
     assert.equal('verifiedReviews' in result, false);
 });
 
+test('adapts validated occurrence appearance snapshots and drops malformed or duplicate identities', () => {
+    const appearance = { nodeIndex: 2, meshIndex: 4, primitiveIndex: 1, customizable: true,
+        defaultColor: { id: 8, name: 'Ocean', hexCode: '#123456' },
+        allowedColors: [{ id: 8, name: 'Ocean', hexCode: '#123456' }, { id: 9, name: 'Sky', hexCode: '#ABCDEF' }],
+        materialId: 3, materialName: 'PLA' };
+    const result = adaptProductDetail({ ...summary, modelMeshAppearances: [appearance, appearance] });
+    assert.deepEqual(result.modelMeshAppearances, [appearance]);
+    assert.deepEqual(adaptProductDetail({ ...summary, modelMeshAppearances: [{ ...appearance, allowedColors: [] }] }).modelMeshAppearances, []);
+});
+
 test('product API requests use the central client and encode list parameters', async () => {
     const calls = [];
     const api = createProductApi({ get: async (...args) => { calls.push(args); return args[0] === '/products' ? { items: [], page: 0, size: 12, totalElements: 0, totalPages: 0 } : summary; } });

@@ -2,6 +2,33 @@ function isRecord(value) {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function isMeshColor(value) {
+    return isRecord(value) && Number.isSafeInteger(value.id) && value.id > 0
+        && typeof value.name === 'string' && value.name.trim().length > 0
+        && (value.hexCode == null || /^#[\da-f]{6}$/i.test(value.hexCode));
+}
+
+function adaptMeshAppearances(value) {
+    if (!Array.isArray(value)) return [];
+    const seen = new Set();
+    return value.filter(item => {
+        if (!isRecord(item) || !Number.isSafeInteger(item.nodeIndex) || item.nodeIndex < 0
+            || !Number.isSafeInteger(item.meshIndex) || item.meshIndex < 0
+            || !Number.isSafeInteger(item.primitiveIndex) || item.primitiveIndex < 0
+            || typeof item.customizable !== 'boolean' || !isMeshColor(item.defaultColor)
+            || !Array.isArray(item.allowedColors) || !Number.isSafeInteger(item.materialId) || item.materialId < 1
+            || typeof item.materialName !== 'string') return false;
+        const key = `${item.nodeIndex}:${item.meshIndex}:${item.primitiveIndex}`;
+        if (seen.has(key)) return false;
+        const ids = item.allowedColors.map(color => color?.id);
+        if (!item.allowedColors.every(isMeshColor) || new Set(ids).size !== ids.length
+            || (item.customizable && (!ids.length || !ids.includes(item.defaultColor.id)))
+            || (!item.customizable && ids.length > 0)) return false;
+        seen.add(key);
+        return true;
+    });
+}
+
 function adaptProductSummary(item) {
     if (!isRecord(item) || (typeof item.id !== 'number' && typeof item.id !== 'string') || typeof item.name !== 'string') {
         throw new Error('Invalid product item response');
@@ -61,6 +88,7 @@ export function adaptProductDetail(payload) {
             ? { x: payload.sizeXMm, y: payload.sizeYMm, z: payload.sizeZMm }
             : null,
         publicModelParts: modelParts,
+        modelMeshAppearances: adaptMeshAppearances(payload.modelMeshAppearances),
     };
 }
 
