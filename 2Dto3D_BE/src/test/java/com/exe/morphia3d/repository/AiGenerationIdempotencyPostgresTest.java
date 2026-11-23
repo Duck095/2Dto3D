@@ -34,7 +34,7 @@ class AiGenerationIdempotencyPostgresTest {
         assertThat(throughV14.migrate().migrationsExecuted).isEqualTo(14);
         PostgresTestRoleProvisioning.grantSnapshotReferencePrivileges(jdbc);
         Flyway flyway = flyway(dataSource, null);
-        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(5);
+        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(6);
         flyway.validate();
 
         Integer firstOwner = insertUser(jdbc, "idem-first");

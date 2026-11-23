@@ -108,7 +108,7 @@ class ProductApiPostgresSmokeTest {
         assertThat(port).isPositive();
         assertThat(jdbc.queryForList(
                 "SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank", String.class))
-                .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19");
+                .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20");
 
         JsonNode firstPage = getJson("/api/products?page=0&size=12&sort=newest", HttpStatus.OK);
         JsonNode secondPage = getJson("/api/products?page=1&size=12&sort=newest", HttpStatus.OK);

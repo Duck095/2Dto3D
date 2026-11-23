@@ -191,13 +191,13 @@ class PostgresDesignerPublicationLockTest {
                 .locations("classpath:db/migration").schemas("public").defaultSchema("public")
                 .baselineOnMigrate(false).load();
         MigrateResult postV14 = currentSchema.migrate();
-        if (postV14.migrationsExecuted != 5) {
-            throw new IllegalStateException("Current publication schema must apply V15 through V19");
+        if (postV14.migrationsExecuted != 6) {
+            throw new IllegalStateException("Current publication schema must apply V15 through V20");
         }
         currentSchema.validate();
         if (!adminJdbc.queryForList("SELECT version FROM flyway_schema_history ORDER BY installed_rank", String.class)
-                .equals(List.of("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19"))) {
-            throw new IllegalStateException("Current publication schema must contain successful V1 through V19");
+                .equals(List.of("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20"))) {
+            throw new IllegalStateException("Current publication schema must contain successful V1 through V20");
         }
 
         adminJdbc.execute("CREATE ROLE " + APPLICATION_USER + " LOGIN PASSWORD '" + APPLICATION_PASSWORD + "'");
@@ -234,7 +234,7 @@ class PostgresDesignerPublicationLockTest {
                 .isBetween(160000, 169999);
         assertThat(migrationJdbc.queryForList(
                 "SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank", String.class))
-                .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19");
+                .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20");
         assertThat(migrationJdbc.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE type = 'BASELINE'", Integer.class)).isZero();
         SeededModel fixture = seedReadyPendingModel();

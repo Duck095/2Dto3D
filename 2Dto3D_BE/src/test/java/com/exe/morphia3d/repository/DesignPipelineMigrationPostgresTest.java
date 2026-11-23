@@ -55,8 +55,8 @@ class DesignPipelineMigrationPostgresTest {
 
         Flyway flyway = flyway(dataSource, null);
         int remainingMigrations = flyway.migrate().migrationsExecuted;
-        assertThat(14 + remainingMigrations).isEqualTo(19);
-        assertThat(remainingMigrations).isEqualTo(5);
+        assertThat(14 + remainingMigrations).isEqualTo(20);
+        assertThat(remainingMigrations).isEqualTo(6);
         flyway.validate();
         assertThat(jdbc.queryForList("SELECT table_name FROM information_schema.tables WHERE table_schema='public'", String.class))
                 .contains("design_projects", "design_project_inputs", "design_reference_sets", "design_reference_set_versions",
