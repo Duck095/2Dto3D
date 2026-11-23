@@ -18,7 +18,7 @@ final class MigrationCheckConstraintCanonicalizer {
             check("orders", "ck_orders_status", "status", "PENDING", "PROCESSING", "SUCCEEDED", "CANCELED"),
             check("payments", "ck_payments_method", "method", "VNPAY", "MOMO", "BANK_TRANSFER"),
             check("payments", "ck_payments_status", "status", "PENDING", "SUCCESS", "FAILED"),
-            check("media_asset", "ck_media_asset_kind", "media_kind", "IMAGE", "MODEL_3D"),
+            check("media_asset", "ck_media_asset_kind", "media_kind", "IMAGE", "MODEL_3D", "PRINT_3MF"),
             check("media_asset", "ck_media_asset_state", "state", "PENDING_UPLOAD", "UPLOADING", "READY",
                     "ATTACHED", "CLEANUP_PENDING", "CLEANUP_LEASED", "DELETED"),
             check("staff_profiles", "ck_staff_profiles_status", "status",

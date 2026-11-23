@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { ENDPOINTS } from '../../../services/api/endpoints.js';
-import { isAdminProductPage, isAdminProduct, isMaterialList, buildMetadataPayload, classifyAdminApiError, getAdminMutationErrorMessage, validateGlbFile, inspectGlbScene, validateOfflineGlb, isMeshStructureResponse, isMeshConfigurationResponse, buildMeshConfigurationPayload, mapBackendOccurrencesToLocalMeshes, meshConfigurationColorsExist, isLocalPreviewProvenanceCurrent } from './adminProductContract.js';
+import { isAdminProductPage, isAdminProduct, isMaterialList, buildMetadataPayload, classifyAdminApiError, getAdminMutationErrorMessage, validateGlbFile, validateThreeMfFile, isAdminProductPrintAssetList, inspectGlbScene, validateOfflineGlb, isMeshStructureResponse, isMeshConfigurationResponse, buildMeshConfigurationPayload, mapBackendOccurrencesToLocalMeshes, meshConfigurationColorsExist, isLocalPreviewProvenanceCurrent } from './adminProductContract.js';
 
 function createGlbBuffer(json) {
   const jsonBytes = Buffer.from(JSON.stringify(json));
@@ -74,6 +74,7 @@ test('admin catalog paths match the verified Backend contract', () => {
   assert.equal(ENDPOINTS.ADMIN_PRODUCTS.ARCHIVE(17), '/admin/products/17/archive');
   assert.equal(ENDPOINTS.ADMIN_PRODUCTS.MESH_STRUCTURE(17), '/admin/products/17/mesh-structure');
   assert.equal(ENDPOINTS.ADMIN_PRODUCTS.MESH_CONFIGURATIONS(17), '/admin/products/17/mesh-configurations');
+  assert.equal(ENDPOINTS.ADMIN_PRODUCTS.PRINT_ASSETS(17), '/admin/products/17/print-assets');
   assert.equal(ENDPOINTS.ADMIN_MATERIALS.LIST, '/materials/');
 });
 
@@ -90,6 +91,26 @@ test('metadata payload is explicitly whitelisted', () => {
   assert.deepEqual(buildMetadataPayload({ name: 'A', description: 'B', category: 'C', designerId: 9, filePath3d: 'x' }), {
     name: 'A', description: 'B', category: 'C',
   });
+});
+
+test('3MF upload contract validates extension and Backend size limit', () => {
+  assert.equal(validateThreeMfFile({ name: 'part.3mf', size: 1 }), null);
+  assert.match(validateThreeMfFile({ name: 'part.glb', size: 1 }), /3MF/i);
+  assert.match(validateThreeMfFile({ name: 'part.3mf', size: 50 * 1024 * 1024 + 1 }), /50 MiB/i);
+  assert.match(validateThreeMfFile({ name: 'part.3mf', size: 0 }), /trống/i);
+});
+
+test('3MF history accepts only metadata and rejects provider paths or download URLs', () => {
+  const item = { mediaAssetId: 8, fileName: 'part.3mf', byteCount: 128, status: 'ATTACHED', uploadedAt: '2026-11-23T08:00:00Z' };
+  assert.equal(isAdminProductPrintAssetList([item]), true);
+  for (const unsafe of [
+    { ...item, url: 'https://storage.example/secret' },
+    { ...item, publicId: 'private/key' },
+    { ...item, storagePath: 'private/file' },
+    { ...item, status: 'UNKNOWN' },
+    { ...item, byteCount: 0 },
+  ]) assert.equal(isAdminProductPrintAssetList([unsafe]), false);
+  assert.equal(isAdminProductPrintAssetList({ items: [item] }), false);
 });
 
 test('API error classification distinguishes publish conflicts and ambiguous network outcomes', () => {
@@ -289,12 +310,14 @@ test('admin product adapter uses the shared client and metadata-only PATCH', asy
   assert.match(source, /headers:\s*\{\s*'Content-Type': undefined\s*\}/);
 });
 
-test('materials service is GET-only and screen makes no compatibility or mutation claim', async () => {
-  const source = await readFile(new URL('./adminProductApi.js', import.meta.url), 'utf8');
+test('Admin materials screen uses the catalog service while product API stays scoped to product operations', async () => {
+  const source = await readFile(new URL('../materials/adminMaterialApi.js', import.meta.url), 'utf8');
   const page = await readFile(new URL('../../../pages/admin/AdminMaterialsPage.jsx', import.meta.url), 'utf8');
-  assert.match(source, /apiClient\.get\(ENDPOINTS\.ADMIN_MATERIALS\.LIST/);
-  assert.doesNotMatch(source, /apiClient\.(post|put|patch|delete)\(ENDPOINTS\.ADMIN_MATERIALS/);
-  assert.match(page, /Danh sách vật liệu và màu toàn cục — chưa xác định tương thích cho từng sản phẩm\./);
+  assert.match(source, /client\.get\(ENDPOINTS\.ADMIN_MATERIALS\.COLORS/);
+  assert.match(source, /client\.post\(ENDPOINTS\.ADMIN_MATERIALS\.CREATE_COLOR/);
+  assert.match(source, /client\.post\(ENDPOINTS\.ADMIN_MATERIALS\.CREATE/);
+  assert.match(source, /client\.put\(ENDPOINTS\.ADMIN_MATERIALS\.UPDATE/);
+  assert.match(page, /Quản lý danh mục màu và vật liệu/);
 });
 
 const structureFixture = {
@@ -376,4 +399,30 @@ test('local GLB highlight requires matching create response, current product pat
   assert.equal(isLocalPreviewProvenanceCurrent(preview, product, { ...currentStructure, structureSnapshotId: '123e4567-e89b-42d3-a456-426614174001' }), false);
   assert.equal(isLocalPreviewProvenanceCurrent({ ...preview, mediaAssetId: null, structureSnapshotId: null }, product, currentStructure), false);
   assert.equal(isLocalPreviewProvenanceCurrent({ ...preview, sourceFile: null }, product, currentStructure), false);
+});
+
+test('Admin product page retries published GLB after a fresh login and never falls back to persisted path or object URL', async () => {
+  const source = await readFile(new URL('../../../pages/admin/AdminProductsPage.jsx', import.meta.url), 'utf8');
+  assert.match(source, /getPublishedAdminProductMedia/);
+  assert.match(source, /loadAsync/);
+  assert.match(source, /retryPublishedMedia|RetryPublishedMedia/i);
+  assert.match(source, /status\s*===\s*'ACTIVE'/);
+  assert.doesNotMatch(source, /createObjectURL\(detail\.product\.filePath3d/);
+  assert.doesNotMatch(source, /loadAsync\(detail\.product\.filePath3d/);
+});
+
+test('Admin product editor exposes private 3MF upload and metadata-only history states', async () => {
+  const source = await readFile(new URL('../../../pages/admin/AdminProductsPage.jsx', import.meta.url), 'utf8');
+  assert.match(source, /listAdminProductPrintAssets/);
+  assert.match(source, /uploadAdminProductPrintAsset/);
+  assert.match(source, /accept="\.3mf"/);
+  assert.match(source, /validateThreeMfFile/);
+  assert.match(source, /printUpload\.uploading/);
+  assert.match(source, /printUpload\.error/);
+  assert.match(source, /printUpload\.message/);
+  assert.match(source, /uploadAdminProductPrintAsset\(selectedId, printUpload\.file\)/);
+  assert.match(source, /Đang tải danh sách tệp 3MF/);
+  assert.match(source, /Thử tải lại danh sách 3MF/);
+  assert.match(source, /Không có liên kết tải xuống/);
+  assert.doesNotMatch(source, /href=.*(?:printAsset|storagePath|downloadUrl)/i);
 });

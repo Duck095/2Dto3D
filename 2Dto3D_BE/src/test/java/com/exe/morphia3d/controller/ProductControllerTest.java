@@ -60,13 +60,14 @@ class ProductControllerTest {
     void detailMapsIdAndReturnsDedicatedDto() throws Exception {
         when(productService.getProduct(3)).thenReturn(
                 new ProductDetailResponse(3, "Chair", "chair", "Full description", "Furniture",
-                        List.of(), null, 10.0, 20.0, 30.0, List.of()));
+                        List.of(), null, 10.0, 20.0, 30.0, List.of(), List.of()));
 
         mockMvc.perform(get("/api/products/3"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(3))
                 .andExpect(jsonPath("$.model3dUrl").doesNotExist())
                 .andExpect(jsonPath("$.images").isArray())
+                .andExpect(jsonPath("$.modelMeshAppearances").isArray())
                 .andExpect(jsonPath("$.user").doesNotExist());
 
         verify(productService).getProduct(3);

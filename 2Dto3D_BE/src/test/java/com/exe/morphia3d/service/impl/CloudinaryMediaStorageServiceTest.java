@@ -111,6 +111,34 @@ class CloudinaryMediaStorageServiceTest {
     }
 
     @Test
+    void uploadsThreeMfAsAuthenticatedRawAssetUnderPrintFiles() throws Exception {
+        MediaUploadIntent intent = intent(MediaKind.PRINT_3MF);
+        ValidatedMedia media = validated(MediaKind.PRINT_3MF, "3mf", new byte[]{1, 2, 3});
+        when(uploader.upload(any(InputStream.class), any(Map.class))).thenReturn(providerResponse(intent,
+                "raw", "authenticated", "3mf", 3L, secureUrl(intent, "raw", "authenticated", "3mf")));
+
+        MediaUploadResult result = storage.upload(intent, media);
+
+        assertThat(intent.publicId()).matches("product-media/print-files/[0-9a-f-]{36}/\\d+\\.3mf");
+        assertThat(result.deliveryType()).isEqualTo("authenticated");
+        assertThat(result.resourceType()).isEqualTo("raw");
+        assertThat(uploadOptions()).containsEntry("public_id", intent.publicId())
+                .containsEntry("resource_type", "raw")
+                .containsEntry("type", "authenticated");
+    }
+
+    @Test
+    void rejectsThreeMfProviderResponseWithPublicDeliveryUrl() throws Exception {
+        MediaUploadIntent intent = intent(MediaKind.PRINT_3MF);
+        ValidatedMedia media = validated(MediaKind.PRINT_3MF, "3mf", new byte[]{1, 2, 3});
+        when(uploader.upload(any(InputStream.class), any(Map.class))).thenReturn(providerResponse(intent,
+                "raw", "upload", "3mf", 3L, secureUrl(intent, "raw", "upload", "3mf")));
+
+        assertThatThrownBy(() -> storage.upload(intent, media))
+                .isInstanceOf(MediaStorageException.class);
+    }
+
+    @Test
     void qaLivePngUsesImagesAssetFolderWithoutChangingGeneratedPublicId() throws Exception {
         storage = new CloudinaryMediaStorageService(cloudinary, new MediaStorageProperties(),
                 CloudinaryMediaStorageService.FolderPolicy.QA_DYNAMIC_PRODUCT_MEDIA);
@@ -252,6 +280,18 @@ class CloudinaryMediaStorageServiceTest {
                 .containsEntry("type", "private")
                 .containsEntry("timeout", 60_000);
         verify(uploader).destroy(identity.publicId(), options);
+    }
+
+    @Test
+    void deletesAuthenticatedThreeMfUsingItsStoredIdentity() throws Exception {
+        MediaAssetIdentity identity = identity(MediaKind.PRINT_3MF, "raw", "authenticated");
+        when(uploader.destroy(eq(identity.publicId()), any(Map.class)))
+                .thenReturn(ObjectUtils.asMap("result", "ok"));
+
+        assertThat(storage.delete(identity)).isEqualTo(DeleteResult.DELETED);
+
+        assertThat(deleteOptions()).containsEntry("resource_type", "raw")
+                .containsEntry("type", "authenticated");
     }
 
     @Test
@@ -398,7 +438,7 @@ class CloudinaryMediaStorageServiceTest {
     }
 
     private String secureUrl(MediaUploadIntent intent, String resourceType, String deliveryType, String format) {
-        String suffix = intent.mediaKind() == MediaKind.MODEL_3D ? "" : "." + format;
+        String suffix = intent.mediaKind() == MediaKind.IMAGE ? "." + format : "";
         return "https://res.cloudinary.com/" + CLOUD_NAME + "/" + resourceType + "/" + deliveryType
                 + "/v" + VERSION + "/" + intent.publicId() + suffix;
     }
@@ -429,8 +469,9 @@ class CloudinaryMediaStorageServiceTest {
     }
 
     private String generatedPublicId(MediaKind kind) {
-        String prefix = kind == MediaKind.MODEL_3D ? "models" : "images";
-        String suffix = kind == MediaKind.MODEL_3D ? ".glb" : "";
+        String prefix = kind == MediaKind.MODEL_3D ? "models"
+                : kind == MediaKind.PRINT_3MF ? "print-files" : "images";
+        String suffix = kind == MediaKind.MODEL_3D ? ".glb" : kind == MediaKind.PRINT_3MF ? ".3mf" : "";
         return "product-media/" + prefix + "/11111111-1111-4111-8111-111111111111/42" + suffix;
     }
 

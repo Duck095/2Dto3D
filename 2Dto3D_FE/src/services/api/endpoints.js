@@ -74,9 +74,13 @@ export const ENDPOINTS = Object.freeze({
     ARCHIVE: (id) => `/admin/products/${encodeURIComponent(id)}/archive`,
     MESH_STRUCTURE: (id) => `/admin/products/${encodeURIComponent(id)}/mesh-structure`,
     MESH_CONFIGURATIONS: (id) => `/admin/products/${encodeURIComponent(id)}/mesh-configurations`,
+    PRINT_ASSETS: (id) => `/admin/products/${encodeURIComponent(id)}/print-assets`,
   }),
 
-  ADMIN_MATERIALS: Object.freeze({ LIST: '/materials/' }),
+  ADMIN_MATERIALS: Object.freeze({
+    LIST: '/materials/', CREATE: '/materials/create', UPDATE: id => `/materials/${encodeURIComponent(id)}`,
+    COLORS: '/colors/', CREATE_COLOR: '/colors/create',
+  }),
 
   TASKS: Object.freeze({
     LIST: '/admin/tasks',

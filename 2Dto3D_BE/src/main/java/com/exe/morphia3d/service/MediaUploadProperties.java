@@ -10,6 +10,9 @@ public class MediaUploadProperties {
     private long imageMaxBytes = 10L * 1024 * 1024;
     private int maxImages = 8;
     private long modelMaxBytes = 50L * 1024 * 1024;
+    private long print3mfMaxBytes = 50L * 1024 * 1024;
+    private long print3mfMaxExpandedBytes = 250L * 1024 * 1024;
+    private int print3mfMaxEntries = 4096;
     private long decodedPixelMax = 40_000_000L;
     private int snapshotMaxConcurrent = 1;
     private String snapshotTempDirectory = System.getProperty("java.io.tmpdir", ".");
@@ -36,6 +39,30 @@ public class MediaUploadProperties {
 
     public void setModelMaxBytes(long modelMaxBytes) {
         this.modelMaxBytes = modelMaxBytes;
+    }
+
+    public long getPrint3mfMaxBytes() {
+        return print3mfMaxBytes;
+    }
+
+    public void setPrint3mfMaxBytes(long print3mfMaxBytes) {
+        this.print3mfMaxBytes = print3mfMaxBytes;
+    }
+
+    public long getPrint3mfMaxExpandedBytes() {
+        return print3mfMaxExpandedBytes;
+    }
+
+    public void setPrint3mfMaxExpandedBytes(long print3mfMaxExpandedBytes) {
+        this.print3mfMaxExpandedBytes = print3mfMaxExpandedBytes;
+    }
+
+    public int getPrint3mfMaxEntries() {
+        return print3mfMaxEntries;
+    }
+
+    public void setPrint3mfMaxEntries(int print3mfMaxEntries) {
+        this.print3mfMaxEntries = print3mfMaxEntries;
     }
 
     public long getDecodedPixelMax() {

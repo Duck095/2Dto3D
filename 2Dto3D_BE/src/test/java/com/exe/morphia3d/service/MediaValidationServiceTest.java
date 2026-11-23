@@ -7,10 +7,13 @@ import org.springframework.mock.web.MockMultipartFile;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Base64;
 import java.util.List;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -160,6 +163,71 @@ class MediaValidationServiceTest {
         assertThat(validator.validateGlb(glb).byteCount()).isEqualTo(12);
     }
 
+    @Test
+    void acceptsValidThreeMfArchiveAndReportsPrintMedia() throws Exception {
+        byte[] archive = threeMf("3D/3dmodel.model", "<model/>".getBytes());
+        var upload = threeMfUpload("chair.3mf", "model/3mf", archive);
+
+        ValidatedMedia media = validator.validate3mf(upload);
+
+        assertThat(media.mediaKind()).isEqualTo(MediaKind.PRINT_3MF);
+        assertThat(media.format()).isEqualTo("3mf");
+        assertThat(media.byteCount()).isEqualTo(archive.length);
+    }
+
+    @Test
+    void rejectsThreeMfWithoutRequiredModelMember() throws Exception {
+        byte[] archive = threeMf("metadata/thumbnail.png", new byte[]{1});
+
+        assertThatThrownBy(() -> validator.validate3mf(threeMfUpload("chair.3mf", "application/octet-stream", archive)))
+                .isInstanceOf(MediaValidationException.class);
+    }
+
+    @Test
+    void rejectsEncryptedAndDuplicateThreeMfEntries() throws Exception {
+        byte[] encrypted = validThreeMf();
+        markZipEntriesEncrypted(encrypted);
+        assertThatThrownBy(() -> validator.validate3mf(threeMfUpload("chair.3mf", "model/3mf", encrypted)))
+                .isInstanceOf(MediaValidationException.class);
+
+        byte[] duplicate = threeMf("3D/3dmodel.model", "<model/>".getBytes(),
+                "3d/3dmodel.model", "<model/>".getBytes());
+        assertThatThrownBy(() -> validator.validate3mf(threeMfUpload("chair.3mf", "model/3mf", duplicate)))
+                .isInstanceOf(MediaValidationException.class);
+    }
+
+    @Test
+    void rejectsThreeMfAboveCompressedLimit() throws Exception {
+        properties.setPrint3mfMaxBytes(24);
+        assertThatThrownBy(() -> validator.validate3mf(threeMfUpload("chair.3mf", "model/3mf", validThreeMf())))
+                .isInstanceOf(MediaValidationException.class);
+    }
+
+    @Test
+    void rejectsThreeMfTraversalAndExpandedSizeLimit() throws Exception {
+        byte[] traversal = threeMf("../3D/3dmodel.model", new byte[]{1});
+        assertThatThrownBy(() -> validator.validate3mf(threeMfUpload("chair.3mf", "model/3mf", traversal)))
+                .isInstanceOf(MediaValidationException.class);
+
+        properties.setPrint3mfMaxExpandedBytes(16);
+        byte[] expanded = threeMf("3D/3dmodel.model", new byte[64]);
+        assertThatThrownBy(() -> validator.validate3mf(threeMfUpload("chair.3mf", "model/3mf", expanded)))
+                .isInstanceOf(MediaValidationException.class);
+    }
+
+    @Test
+    void rejectsThreeMfWrongExtensionMimeAndEntryLimit() throws Exception {
+        byte[] archive = validThreeMf();
+        assertThatThrownBy(() -> validator.validate3mf(threeMfUpload("chair.zip", "model/3mf", archive)))
+                .isInstanceOf(MediaValidationException.class);
+        assertThatThrownBy(() -> validator.validate3mf(threeMfUpload("chair.3mf", "text/plain", archive)))
+                .isInstanceOf(MediaValidationException.class);
+
+        properties.setPrint3mfMaxEntries(1);
+        assertThatThrownBy(() -> validator.validate3mf(threeMfUpload("chair.3mf", "model/3mf", archive)))
+                .isInstanceOf(MediaValidationException.class);
+    }
+
     private void assertRejectedGlb(MockMultipartFile glb) {
         assertThatThrownBy(() -> validator.validateGlb(glb))
                 .isInstanceOf(MediaValidationException.class);
@@ -179,5 +247,43 @@ class MediaValidationServiceTest {
         buffer.putInt(4, version);
         buffer.putInt(8, declaredLength);
         return new MockMultipartFile("model", filename, mime, bytes);
+    }
+
+    private MockMultipartFile threeMfUpload(String filename, String mime, byte[] bytes) {
+        return new MockMultipartFile("printFile", filename, mime, bytes);
+    }
+
+    private byte[] validThreeMf() throws IOException {
+        return threeMf("3D/3dmodel.model", "<model/>".getBytes());
+    }
+
+    private byte[] threeMf(String member, byte[] content) throws IOException {
+        return threeMf(member, content, null, null);
+    }
+
+    private byte[] threeMf(String member, byte[] content, String extraMember, byte[] extraContent) throws IOException {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (ZipOutputStream zip = new ZipOutputStream(bytes)) {
+            put(zip, "[Content_Types].xml", "<Types/>".getBytes());
+            put(zip, member, content);
+            if (extraMember != null) put(zip, extraMember, extraContent);
+        }
+        return bytes.toByteArray();
+    }
+
+    private void markZipEntriesEncrypted(byte[] archive) {
+        for (int i = 0; i + 8 < archive.length; i++) {
+            if (archive[i] == 'P' && archive[i + 1] == 'K' && archive[i + 2] == 3 && archive[i + 3] == 4) {
+                archive[i + 6] |= 1;
+            } else if (archive[i] == 'P' && archive[i + 1] == 'K' && archive[i + 2] == 1 && archive[i + 3] == 2) {
+                archive[i + 8] |= 1;
+            }
+        }
+    }
+
+    private void put(ZipOutputStream zip, String name, byte[] content) throws IOException {
+        zip.putNextEntry(new ZipEntry(name));
+        zip.write(content);
+        zip.closeEntry();
     }
 }

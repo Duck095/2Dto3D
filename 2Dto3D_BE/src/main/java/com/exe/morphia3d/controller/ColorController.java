@@ -7,6 +7,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/colors")
@@ -17,6 +19,11 @@ public class ColorController {
     public ResponseEntity<Void> createColor(@RequestBody ColorRequest colorRequest) {
         colorService.addColor(colorRequest);
         return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/")
+    public ResponseEntity<List<ColorResponse>> getAllColors() {
+        return ResponseEntity.ok(colorService.getAllColors());
     }
 
     @GetMapping("/{colorName}")

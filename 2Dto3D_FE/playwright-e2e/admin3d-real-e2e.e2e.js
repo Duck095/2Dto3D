@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { deflateSync } from 'node:zlib';
+import { deflateSync, deflateRawSync } from 'node:zlib';
 
 test.use({ launchOptions: { args: [
   '--disable-background-networking',
@@ -48,6 +48,53 @@ function makePng() {
     Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
     pngChunk('IHDR', header), pngChunk('IDAT', deflateSync(pixels)), pngChunk('IEND', Buffer.alloc(0)),
   ]);
+}
+
+function make3mf() {
+  const files = [
+    ['[Content_Types].xml', Buffer.from('<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Override PartName="/3D/3dmodel.model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/></Types>')],
+    ['3D/3dmodel.model', Buffer.from('<?xml version="1.0"?><model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"><resources/><build/></model>')],
+  ];
+  const local = [];
+  const central = [];
+  let offset = 0;
+  for (const [name, data] of files) {
+    const filename = Buffer.from(name);
+    const compressed = deflateRawSync(data);
+    const crc = crc32(data);
+    const localHeader = Buffer.alloc(30);
+    localHeader.writeUInt32LE(0x04034b50, 0);
+    localHeader.writeUInt16LE(20, 4);
+    localHeader.writeUInt16LE(0x0800, 6);
+    localHeader.writeUInt16LE(8, 8);
+    localHeader.writeUInt32LE(crc, 14);
+    localHeader.writeUInt32LE(compressed.length, 18);
+    localHeader.writeUInt32LE(data.length, 22);
+    localHeader.writeUInt16LE(filename.length, 26);
+    local.push(localHeader, filename, compressed);
+
+    const centralHeader = Buffer.alloc(46);
+    centralHeader.writeUInt32LE(0x02014b50, 0);
+    centralHeader.writeUInt16LE(20, 4);
+    centralHeader.writeUInt16LE(20, 6);
+    centralHeader.writeUInt16LE(0x0800, 8);
+    centralHeader.writeUInt16LE(8, 10);
+    centralHeader.writeUInt32LE(crc, 16);
+    centralHeader.writeUInt32LE(compressed.length, 20);
+    centralHeader.writeUInt32LE(data.length, 24);
+    centralHeader.writeUInt16LE(filename.length, 28);
+    centralHeader.writeUInt32LE(offset, 42);
+    central.push(centralHeader, filename);
+    offset += localHeader.length + filename.length + compressed.length;
+  }
+  const centralBytes = Buffer.concat(central);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(files.length, 8);
+  end.writeUInt16LE(files.length, 10);
+  end.writeUInt32LE(centralBytes.length, 12);
+  end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...local, centralBytes, end]);
 }
 
 function makeGlb() {
@@ -114,7 +161,7 @@ function recordNetwork(page) {
   return events;
 }
 
-test('real Admin browser uploads a GLB snapshot and persists mesh/color revisions through Vite and PostgreSQL', async ({ page, request, context }) => {
+test('real Admin completes product onboarding with materials, private 3MF and public viewer color selection', async ({ page, request, context }) => {
   expect(apiUrl).toBeTruthy();
   expect(admin.email && admin.password && secondAdmin.email && secondAdmin.password && user.email && user.password).toBeTruthy();
   mkdirSync(evidenceDir, { recursive: true });
@@ -146,6 +193,52 @@ test('real Admin browser uploads a GLB snapshot and persists mesh/color revision
   expect(loginResponse.status(), loginBody).toBe(200);
   expect(loginPayload.role).toBe('ADMIN');
   await page.waitForURL(url => url.pathname.startsWith('/admin'));
+
+  const catalogRun = `${Date.now()}`;
+  const whiteName = `E2E White ${catalogRun}`;
+  const blueName = `E2E Blue ${catalogRun}`;
+  const materialName = `E2E PLA ${catalogRun}`;
+  await page.goto('/admin/materials');
+  await page.getByLabel('Tên màu').fill(whiteName);
+  await page.getByLabel('Mã HEX').fill('#eeeeee');
+  const whiteResponsePromise = page.waitForResponse(response => response.request().method() === 'POST'
+    && new URL(response.url()).pathname === '/api/colors/create');
+  await page.getByRole('button', { name: 'Thêm màu' }).click();
+  const whiteResponse = await whiteResponsePromise;
+  expect(whiteResponse.status()).toBe(200);
+  await page.getByLabel('Tên màu').fill(blueName);
+  await page.getByLabel('Mã HEX').fill('#2255cc');
+  const blueResponsePromise = page.waitForResponse(response => response.request().method() === 'POST'
+    && new URL(response.url()).pathname === '/api/colors/create');
+  await page.getByRole('button', { name: 'Thêm màu' }).click();
+  const blueResponse = await blueResponsePromise;
+  expect(blueResponse.status()).toBe(200);
+  await page.getByLabel('Tên vật liệu').fill(materialName);
+  await page.getByLabel('Loại').fill('PLA');
+  await page.getByLabel('Giá mỗi gram').fill('1');
+  await page.getByLabel('Số lượng tồn').fill('0');
+  await page.getByLabel('Đơn vị').fill('g');
+  await page.getByRole('checkbox', { name: whiteName }).check();
+  await page.getByRole('checkbox', { name: blueName }).check();
+  const materialResponsePromise = page.waitForResponse(response => response.request().method() === 'POST'
+    && new URL(response.url()).pathname === '/api/materials/create');
+  await page.getByRole('button', { name: 'Thêm vật liệu' }).click();
+  const materialResponse = await materialResponsePromise;
+  expect(materialResponse.status()).toBe(200);
+  const catalogHeaders = { Authorization: `Bearer ${loginPayload.token}` };
+  const colorsResponse = await request.get(`${apiUrl}/api/colors/`, { headers: catalogHeaders });
+  expect(colorsResponse.status()).toBe(200);
+  const catalogColors = await colorsResponse.json();
+  const whiteColor = catalogColors.find(color => color.name === whiteName);
+  const blueColor = catalogColors.find(color => color.name === blueName);
+  expect(whiteColor?.colorId).toBeGreaterThan(0);
+  expect(blueColor?.colorId).toBeGreaterThan(0);
+  const materialsResponse = await request.get(`${apiUrl}/api/materials/`, { headers: catalogHeaders });
+  expect(materialsResponse.status()).toBe(200);
+  const createdMaterial = (await materialsResponse.json()).find(material => material.name === materialName);
+  expect(createdMaterial?.id).toBeGreaterThan(0);
+  expect(createdMaterial.colors.map(color => color.colorId)).toEqual(expect.arrayContaining([whiteColor.colorId, blueColor.colorId]));
+
   await page.goto('/admin/products');
   await expect(page.getByRole('heading', { name: 'Quản lý sản phẩm' })).toBeVisible();
 
@@ -186,13 +279,13 @@ test('real Admin browser uploads a GLB snapshot and persists mesh/color revision
   const structureSnapshotId = structure.structureSnapshotId;
   const mediaAssetId = structure.mediaAssetId;
   const materialSelect = page.getByLabel('Material áp dụng cho revision này');
-  await expect(materialSelect.locator('option').filter({ hasText: 'E2E PLA' })).toHaveCount(1);
-  await materialSelect.selectOption({ label: 'E2E PLA' });
+  await expect(materialSelect.locator('option').filter({ hasText: materialName })).toHaveCount(1);
+  await materialSelect.selectOption({ label: materialName });
   const rows = page.locator('.admin-mesh-config__row');
   await rows.nth(0).getByLabel('Khách được đổi màu').check();
-  await rows.nth(0).locator('label').filter({ hasText: 'Màu mặc định' }).locator('select').selectOption({ label: 'E2E Blue' });
-  await rows.nth(0).getByLabel('E2E White', { exact: true }).check();
-  await rows.nth(1).locator('label').filter({ hasText: 'Màu mặc định' }).locator('select').selectOption({ label: 'E2E White' });
+  await rows.nth(0).locator('label').filter({ hasText: 'Màu mặc định' }).locator('select').selectOption({ label: blueName });
+  await rows.nth(0).getByLabel(whiteName, { exact: true }).check();
+  await rows.nth(1).locator('label').filter({ hasText: 'Màu mặc định' }).locator('select').selectOption({ label: whiteName });
   const saveResponsePromise = page.waitForResponse(response => response.request().method() === 'PUT'
     && new URL(response.url()).pathname === `/api/admin/products/${productId}/mesh-configurations`);
   await page.getByRole('button', { name: 'Lưu cấu hình' }).click();
@@ -210,12 +303,37 @@ test('real Admin browser uploads a GLB snapshot and persists mesh/color revision
   });
   expect(firstSnapshot.status()).toBe(200);
 
+  const printAssetsUrl = `/api/admin/products/${productId}/print-assets`;
+  await page.getByLabel('Tệp in 3D (.3mf)').setInputFiles({ name: 'invalid.txt', mimeType: 'text/plain', buffer: Buffer.from('not-3mf') });
+  const postsBeforeInvalidExtension = network.filter(event => event.method === 'POST' && event.path === printAssetsUrl).length;
+  await page.getByRole('button', { name: 'Tải 3MF lên' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'phần mở rộng .3mf' })).toBeVisible();
+  expect(network.filter(event => event.method === 'POST' && event.path === printAssetsUrl)).toHaveLength(postsBeforeInvalidExtension);
+
+  const printFile = make3mf();
+  await page.getByLabel('Tệp in 3D (.3mf)').setInputFiles({ name: 'admin3d-e2e.3mf', mimeType: 'model/3mf', buffer: printFile });
+  const printUploadPromise = page.waitForResponse(response => response.request().method() === 'POST'
+    && new URL(response.url()).pathname === printAssetsUrl);
+  await page.getByRole('button', { name: 'Tải 3MF lên' }).click();
+  const printUpload = await printUploadPromise;
+  expect(printUpload.status()).toBe(201);
+  const printMetadata = await printUpload.json();
+  expect(printMetadata).toMatchObject({ fileName: 'admin3d-e2e.3mf', status: 'ATTACHED' });
+  expect(Object.keys(printMetadata).sort()).toEqual(['byteCount', 'fileName', 'mediaAssetId', 'status', 'uploadedAt'].sort());
+  await expect(page.getByText('admin3d-e2e.3mf', { exact: true })).toBeVisible();
+  await expect(page.locator('.admin-print-assets a')).toHaveCount(0);
+  const invalidArchive = await request.post(`${apiUrl}${printAssetsUrl}`, {
+    headers: { Authorization: `Bearer ${await realLogin(request, admin)}` },
+    multipart: { file: { name: 'invalid.3mf', mimeType: 'model/3mf', buffer: Buffer.from('invalid zip') } },
+  });
+  expect(invalidArchive.status()).toBe(415);
+
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Quản lý sản phẩm' })).toBeVisible();
   const reloadedRow = page.locator('tr').filter({ hasText: productName });
   await reloadedRow.getByRole('button', { name: 'Chỉnh sửa' }).click();
   await expect(page.locator('.admin-mesh-config__meta > div').filter({ hasText: 'Revision' }).locator('dd')).toHaveText('1');
-  await expect(page.getByText('Không có endpoint media công khai an toàn để tải GLB đã lưu. Sau khi tải lại trang, cấu hình vẫn đọc được nhưng 3D preview bị giới hạn.')).toBeVisible();
+  await expect(page.getByText('GLB lưu trữ chỉ được tải lại sau khi sản phẩm được xuất bản. Bản nháp chỉ dùng preview cục bộ trong phiên đã tải lên.')).toBeVisible();
   await expect(page.locator('.admin-mesh-config__row')).toHaveCount(2);
   await expect(page.locator('.admin-mesh-config__row').nth(0).getByLabel('Khách được đổi màu')).toBeChecked();
   await expect(page.locator('.admin-mesh-config__row').nth(1).getByLabel('Khách được đổi màu')).not.toBeChecked();
@@ -226,7 +344,7 @@ test('real Admin browser uploads a GLB snapshot and persists mesh/color revision
   await page.setViewportSize({ width: 1365, height: 900 });
 
   const editorRows = page.locator('.admin-mesh-config__row');
-  await editorRows.nth(0).locator('label').filter({ hasText: 'Màu mặc định' }).locator('select').selectOption({ label: 'E2E White' });
+  await editorRows.nth(0).locator('label').filter({ hasText: 'Màu mặc định' }).locator('select').selectOption({ label: whiteName });
   const putsBeforeOffline = network.filter(event => event.method === 'PUT' && event.path.endsWith('/mesh-configurations')).length;
   await context.setOffline(true);
   await page.getByRole('button', { name: 'Lưu cấu hình' }).click();
@@ -248,6 +366,12 @@ test('real Admin browser uploads a GLB snapshot and persists mesh/color revision
   expect(await nonAdmin.text()).not.toContain(structureSnapshotId);
   expect((await request.get(`${apiUrl}/api/admin/products`, { headers: { Authorization: `Bearer ${userToken}` } })).status()).toBe(403);
   expect((await request.get(`${apiUrl}/api/admin/products`, { headers: { Authorization: `Bearer ${adminToken}` } })).status()).toBe(200);
+  const deniedPrintUpload = await request.post(`${apiUrl}${printAssetsUrl}`, {
+    headers: { Authorization: `Bearer ${userToken}` },
+    multipart: { file: { name: 'forbidden.3mf', mimeType: 'model/3mf', buffer: printFile } },
+  });
+  expect(deniedPrintUpload.status()).toBe(403);
+  expect((await request.get(`${apiUrl}${printAssetsUrl}`, { headers: { Authorization: `Bearer ${userToken}` } })).status()).toBe(403);
 
   const oversizedTotalBytes = 33_554_433;
   let oversizedSent = 0;
@@ -336,13 +460,68 @@ test('real Admin browser uploads a GLB snapshot and persists mesh/color revision
   expect(afterRace.status()).toBe(200);
   expect((await afterRace.json()).revision).toBe(2);
 
+  await page.once('dialog', dialog => dialog.accept());
+  const publishPromise = page.waitForResponse(response => response.request().method() === 'POST'
+    && new URL(response.url()).pathname === `/api/admin/products/${productId}/publish`);
+  await page.locator('tr').filter({ hasText: productName }).getByRole('button', { name: 'Xuất bản' }).click();
+  const publishResponse = await publishPromise;
+  const publishBody = await publishResponse.text();
+  expect(publishResponse.status(), publishBody).toBe(204);
+
+  const publicDetailResponse = await request.get(`${apiUrl}/api/products/${productId}`);
+  expect(publicDetailResponse.status()).toBe(200);
+  const publicDetail = await publicDetailResponse.json();
+  expect(publicDetail.modelMeshAppearances).toHaveLength(2);
+  expect(publicDetail.modelMeshAppearances[0]).toMatchObject({ customizable: true });
+  expect(publicDetail.modelMeshAppearances[0].allowedColors.map(color => color.name)).toEqual(expect.arrayContaining([whiteName, blueName]));
+  expect(publicDetail.modelMeshAppearances[1]).toMatchObject({ customizable: false, allowedColors: [] });
+  expect(publicDetail.model3dUrl).toMatch(/^https:\/\/res\.cloudinary\.com\/test-cloud\/raw\/upload\//);
+
+  let fakeGlbRequests = 0;
+  await context.route(publicDetail.model3dUrl, async route => {
+    fakeGlbRequests += 1;
+    await route.fulfill({ status: 200, contentType: 'model/gltf-binary', body: glb,
+      headers: { 'Access-Control-Allow-Origin': viteOrigin, 'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS' } });
+  });
+  await page.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });
+  await context.clearCookies();
+  const reopened = await context.newPage();
+  await reopened.goto('/login');
+  const reopenedLogin = reopened.waitForResponse(response => response.request().method() === 'POST'
+    && new URL(response.url()).pathname === '/api/auth/login');
+  await reopened.getByLabel('Địa chỉ email').fill(admin.email);
+  await reopened.locator('input#auth-password').fill(admin.password);
+  await reopened.getByRole('button', { name: 'Đăng nhập' }).click();
+  expect((await reopenedLogin).status()).toBe(200);
+  await reopened.waitForURL(url => url.pathname.startsWith('/admin'));
+  await reopened.goto('/admin/products');
+  const publishedRow = reopened.locator('tr').filter({ hasText: productName });
+  await expect(publishedRow).toContainText('Đang hoạt động');
+  await publishedRow.getByRole('button', { name: 'Chỉnh sửa' }).click();
+  await expect(reopened.getByText('Đang tải lại GLB đã xuất bản…')).toHaveCount(0);
+  await expect(reopened.locator('.admin-mesh-config__preview canvas')).toBeVisible();
+  await expect(reopened.getByText('admin3d-e2e.3mf', { exact: true })).toBeVisible();
+
+  await reopened.goto(`/product/${productId}`);
+  await expect(reopened.getByRole('heading', { name: productName })).toBeVisible();
+  await reopened.getByRole('button', { name: 'Xem mô hình 3D' }).click();
+  const publicColorSelect = reopened.getByLabel('Màu bộ phận 1');
+  await expect(publicColorSelect).toBeVisible();
+  await expect(reopened.getByLabel('Màu bộ phận 2')).toHaveCount(0);
+  await publicColorSelect.selectOption({ label: whiteName });
+  await expect(publicColorSelect).toHaveValue(String(whiteColor.colorId));
+  await expect(reopened.locator('.joy-detail__model-viewer canvas')).toBeVisible();
+  expect(fakeGlbRequests).toBeGreaterThanOrEqual(2);
+
   const requestOrigins = [...new Set(network.filter(event => event.path.startsWith('/api/')).map(event => event.origin))];
   expect(requestOrigins).toEqual([viteOrigin]);
   writeFileSync(resolve(evidenceDir, 'browser-result.json'), JSON.stringify({
     productId, productName, mediaAssetId, structureSnapshotId, materialId: current.materialId,
+    whiteColorId: String(whiteColor.colorId), blueColorId: String(blueColor.colorId),
     snapshotRevision: 1, finalConfigurationRevision: 2, meshOccurrences: structure.primitiveOccurrences.length,
     viteOrigin, backendApiOrigin: apiUrl, fixtureGlbBytes: glb.length, fixtureGlbSha256: sha256(glb),
     fixtureImageBytes: image.length, fixtureImageSha256: sha256(image),
+    fixture3mfBytes: printFile.length, fixture3mfSha256: sha256(printFile),
     statuses: { anonymous: anonymous.status(), nonAdmin: nonAdmin.status(), invalidGlb: invalidUpload.status(),
       invalidMaterial: invalidMaterial.status(), missingOccurrence: missingOccurrence.status(),
       staleSnapshot: staleSnapshot.status(), staleMedia: staleMedia.status(), staleRevision: staleRevision.status(),

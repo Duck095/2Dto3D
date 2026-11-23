@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { getProductDetailState, getProductLoadErrorMessage, isProductNotFound } from '../features/storefront/productApi';
-import { getApprovedProductMedia } from '../features/storefront/productPresentation';
+import { getApprovedProductMedia, selectAllowedMeshColor } from '../features/storefront/productPresentation';
 import { productApi } from '../services/api/productApi';
 import { commerceApi } from '../features/commerce/commerceApiClient';
 import { config } from '../app/config';
@@ -30,6 +30,7 @@ export default function ProductDetailPage() {
     const [state, setState] = useState('loading');
     const [activeImage, setActiveImage] = useState(0);
     const [showModel, setShowModel] = useState(false);
+    const [meshColorSelections, setMeshColorSelections] = useState({});
     const [retry, setRetry] = useState(0);
     const [quoteOptions, setQuoteOptions] = useState([]);
     const [selection, setSelection] = useState('');
@@ -93,6 +94,7 @@ export default function ProductDetailPage() {
         setState('loading');
         setActiveImage(0);
         setShowModel(false);
+        setMeshColorSelections({});
         productApi.getProduct(id, { signal: controller.signal })
             .then(data => { setProduct(data); setState('ready'); })
             .catch(error => {
@@ -131,6 +133,8 @@ export default function ProductDetailPage() {
                                         imgSrc={activeImageUrl || undefined}
                                         dimensions={dimensions ? `${dimensions.x} x ${dimensions.y} x ${dimensions.z} mm` : undefined}
                                         partDefinitions={product.publicModelParts}
+                                        meshAppearances={product.modelMeshAppearances}
+                                        selectedMeshColors={meshColorSelections}
                                         allowColorCustomization={false}
                                         preserveOriginalMaterials
                                         allowDimensionCustomization={false}
@@ -149,6 +153,19 @@ export default function ProductDetailPage() {
                             </div>
                         )}
                     </div>
+                    {showModel && product.modelMeshAppearances?.some(item => item.customizable && item.allowedColors.length > 0) && <section className="joy-detail__mesh-colors" aria-label="Màu bộ phận sản phẩm">
+                        <h2>Chọn màu bộ phận</h2>
+                        {product.modelMeshAppearances.filter(item => item.customizable && item.allowedColors.length > 0).map((appearance, index) => {
+                            const key = `${appearance.nodeIndex}:${appearance.meshIndex}:${appearance.primitiveIndex}`;
+                            const selected = selectAllowedMeshColor(appearance, meshColorSelections[key]) || appearance.defaultColor;
+                            return <label key={key}><span>Bộ phận {index + 1} · Node {appearance.nodeIndex} / Mesh {appearance.meshIndex} / Primitive {appearance.primitiveIndex}</span>
+                                <select aria-label={`Màu bộ phận ${index + 1}`} value={selected.id} onChange={event => {
+                                    const allowed = selectAllowedMeshColor(appearance, Number(event.target.value));
+                                    if (allowed && String(allowed.id) === event.target.value) setMeshColorSelections(current => ({ ...current, [key]: allowed.id }));
+                                }}>{appearance.allowedColors.map(color => <option key={color.id} value={color.id}>{color.name}</option>)}</select>
+                            </label>;
+                        })}
+                    </section>}
                     {(media.images.length > 1 || media.modelUrl) && <div className="joy-detail__media-controls" aria-label="Tư liệu sản phẩm">
                         {media.images.map((image, index) => <button
                             type="button" key={image} aria-label={'Xem ảnh ' + (index + 1)}

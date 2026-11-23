@@ -147,7 +147,7 @@ class DesignerModelUploadSecurityIntegrationTest {
 
         adminUploadWithGlb(new byte[]{1, 2, 3}).andExpect(status().isUnsupportedMediaType())
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.message")
-                        .value("Only supported JPEG, PNG, WebP, and GLB content is accepted"));
+                        .value("Only supported image, GLB, and 3MF content is accepted"));
         verifyNoInteractions(lifecycle, storage, persistence);
     }
 

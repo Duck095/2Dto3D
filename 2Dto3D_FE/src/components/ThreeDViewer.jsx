@@ -12,6 +12,7 @@ import * as THREE from 'three';
 import { getStoredToken } from '../utils/authToken';
 import { hasUsableDesignModelScene } from '../features/ai-studio/projectWorkflowPresentation.js';
 import { getViewerModelScale } from '../features/ai-studio/studioPresentation';
+import { applyMeshAppearanceColors, mapGltfMeshAppearanceTargets } from './meshAppearance.js';
 
 /* ─── Preset color swatches ──────────────────────────────── */
 const COLOR_PRESETS = [
@@ -30,6 +31,8 @@ const COLOR_PRESETS = [
 const STL_PART_CACHE = new WeakMap();
 const EMPTY_PARTS = [];
 const EMPTY_ROTATION = [0, 0, 0];
+const EMPTY_MESH_APPEARANCES = Object.freeze([]);
+const EMPTY_MESH_SELECTIONS = Object.freeze({});
 
 function parseDimensionsCm(dimensions) {
     const numbers = String(dimensions || '')
@@ -256,7 +259,7 @@ function STLModel({
 }
 
 /* ─── GLB named-mesh model ───────────────────────────────── */
-function prepareGLBModel(sourceScene) {
+function prepareGLBModel(sourceScene, associations) {
     const model = sourceScene.clone(true);
     model.traverse(child => {
         if (!child.isMesh) return;
@@ -275,7 +278,8 @@ function prepareGLBModel(sourceScene) {
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
     model.position.sub(center);
-    return { model, baseScale: 3 / (Math.max(size.x, size.y, size.z) || 1) };
+    return { model, baseScale: 3 / (Math.max(size.x, size.y, size.z) || 1),
+        appearanceTargets: mapGltfMeshAppearanceTargets(sourceScene, model, associations) };
 }
 
 function GLBModel({
@@ -292,6 +296,8 @@ function GLBModel({
     preserveOriginalMaterials,
     requireRenderableGLB,
     onModelLoadState,
+    meshAppearances = EMPTY_MESH_APPEARANCES,
+    selectedMeshColors = EMPTY_MESH_SELECTIONS,
 }) {
     const configureLoader = useCallback(loader => {
         const token = url.startsWith('/api/') ? getStoredToken() : null;
@@ -302,8 +308,12 @@ function GLBModel({
         if (requireRenderableGLB && !hasUsableDesignModelScene(gltf.scene)) {
             throw new Error('The GLB scene has no valid renderable mesh geometry.');
         }
-        return prepareGLBModel(gltf.scene);
+        return prepareGLBModel(gltf.scene, gltf.parser?.associations);
     }, [gltf, requireRenderableGLB]);
+
+    useEffect(() => {
+        applyMeshAppearanceColors(preparedModel.appearanceTargets, meshAppearances, selectedMeshColors);
+    }, [meshAppearances, preparedModel, selectedMeshColors]);
 
     useEffect(() => {
         const meshIds = [];
@@ -441,6 +451,8 @@ export default function ThreeDViewer({
     onCustomizationChange,
     requireRenderableGLB = false,
     onModelLoadState,
+    meshAppearances = EMPTY_MESH_APPEARANCES,
+    selectedMeshColors = EMPTY_MESH_SELECTIONS,
 }) {
     const resolvedModelUrl = modelUrl || stlUrl;
     const isGLBModel = /\.glb(?:$|[?#])/i.test(resolvedModelUrl || '');
@@ -1131,6 +1143,8 @@ export default function ThreeDViewer({
                                     preserveOriginalMaterials={preserveOriginalMaterials}
                                     requireRenderableGLB={requireRenderableGLB}
                                     onModelLoadState={onModelLoadState}
+                                    meshAppearances={meshAppearances}
+                                    selectedMeshColors={selectedMeshColors}
                                 />
                             ) : (
                                 <STLModel

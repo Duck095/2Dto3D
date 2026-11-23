@@ -371,6 +371,37 @@ class AdminProductCatalogIntegrationTest {
     }
 
     @Test
+    void lookingUpUnknownColorReturnsNotFoundInsteadOfServerError() throws Exception {
+        mvc.perform(get("/api/colors/{colorName}", "AT missing color")
+                        .with(user("catalog-admin").roles("ADMIN")))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void colorCatalogIncludesUnassignedColorsInStableOrder() throws Exception {
+        jdbc.update("insert into colors (name, hex_code) values (?, ?)", "AT catalog color Zulu", "#123456");
+        jdbc.update("insert into colors (name, hex_code) values (?, ?)", "AT catalog color Alpha", "#654321");
+
+        mvc.perform(get("/api/colors/"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].name").value("AT catalog color Alpha"))
+                .andExpect(jsonPath("$[0].hexCode").value("#654321"))
+                .andExpect(jsonPath("$[1].name").value("AT catalog color Zulu"))
+                .andExpect(jsonPath("$[1].hexCode").value("#123456"));
+    }
+
+    @Test
+    void creatingMaterialWithUnknownColorIdReturnsNotFoundInsteadOfServerError() throws Exception {
+        mvc.perform(post("/api/materials/create")
+                        .with(user("catalog-admin").roles("ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"AT missing color reference\",\"type\":\"PLA\","
+                                + "\"pricePerGram\":0.05,\"stockQuantity\":100,\"unit\":\"g\","
+                                + "\"colors\":[{\"colorId\":2147483647,\"quantity\":1}]}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void malformedAdminProductPatchReturns400WithoutMutationOrUploadSpecificError() throws Exception {
         Model3d product = savePublishedProductWithMediaReferences();
         String filePathBefore = jdbc.queryForObject("select file_path_3d from model_3d where model_id = ?",

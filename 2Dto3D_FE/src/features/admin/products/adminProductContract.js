@@ -1,6 +1,8 @@
 const PRODUCT_STATUSES = new Set(['PENDING', 'ACTIVE', 'INACTIVE']);
 const HEX_COLOR = /^#(?:[\da-f]{3}|[\da-f]{6})$/i;
 export const MAX_GLB_BYTES = 50 * 1024 * 1024;
+export const MAX_3MF_BYTES = 50 * 1024 * 1024;
+const PRINT_ASSET_STATUSES = new Set(['PENDING_UPLOAD', 'UPLOADING', 'READY', 'ATTACHED', 'CLEANUP_PENDING', 'CLEANUP_LEASED', 'DELETED']);
 const GLB_MIME_TYPES = new Set(['model/gltf-binary', 'application/octet-stream']);
 
 export function isAdminProduct(product) {
@@ -8,6 +10,40 @@ export function isAdminProduct(product) {
     && product.sourceType === 'DESIGNER_MODEL'
     && typeof product.name === 'string'
     && PRODUCT_STATUSES.has(product.status));
+}
+
+export function validateThreeMfFile(file) {
+  if (!file || typeof file.name !== 'string' || !/\.3mf$/i.test(file.name)) return 'Chỉ chấp nhận tệp 3MF có phần mở rộng .3mf.';
+  if (!Number.isInteger(file.size) || file.size <= 0) return 'Tệp 3MF không được để trống.';
+  if (file.size > MAX_3MF_BYTES) return 'Tệp 3MF không được vượt quá 50 MiB.';
+  return null;
+}
+
+const isPrintAsset = value => Boolean(value && Number.isInteger(value.mediaAssetId) && value.mediaAssetId > 0
+  && typeof value.fileName === 'string' && value.fileName.length > 0 && value.fileName.length <= 255
+  && !/[\\/\u0000-\u001f]/.test(value.fileName)
+  && Number.isInteger(value.byteCount) && value.byteCount > 0 && value.byteCount <= MAX_3MF_BYTES
+  && PRINT_ASSET_STATUSES.has(value.status)
+  && typeof value.uploadedAt === 'string' && Number.isFinite(Date.parse(value.uploadedAt))
+  && Object.keys(value).every(key => ['mediaAssetId', 'fileName', 'byteCount', 'status', 'uploadedAt'].includes(key)));
+
+export function isAdminProductPrintAssetList(value) {
+  return Array.isArray(value) && value.every(isPrintAsset);
+}
+
+export function isPublishedAdminProductMedia(value, expectedProductId) {
+  if (!value || Number(value.id) !== Number(expectedProductId)
+    || (value.status != null && value.status !== 'ACTIVE')
+    || typeof value.model3dUrl !== 'string') return false;
+  try {
+    const url = new URL(value.model3dUrl);
+    const match = url.pathname.match(/^\/[^/]+\/raw\/upload\/v[1-9]\d*\/product-media\/models\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/[1-9]\d*\.glb$/i);
+    return url.protocol === 'https:' && url.hostname.toLowerCase() === 'res.cloudinary.com'
+      && (url.port === '' || url.port === '443') && !url.username && !url.password
+      && !url.search && !url.hash && Boolean(match);
+  } catch {
+    return false;
+  }
 }
 
 export function isAdminProductPage(page) {

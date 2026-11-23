@@ -13,6 +13,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.List;
+
 @Service
 @RequiredArgsConstructor
 public class ColorServiceImpl implements ColorService {
@@ -54,9 +56,17 @@ public class ColorServiceImpl implements ColorService {
         Color color = colorRepository.findByName(colorName);
 
         if (color == null) {
-            throw new RuntimeException("Color not found");
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Color not found");
         }
 
         return colorMapper.toResponse(color);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ColorResponse> getAllColors() {
+        return colorRepository.findAllByOrderByNameAscIdAsc().stream()
+                .map(colorMapper::toResponse)
+                .toList();
     }
 }

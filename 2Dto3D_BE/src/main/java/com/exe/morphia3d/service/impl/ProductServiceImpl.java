@@ -5,17 +5,30 @@ import com.exe.morphia3d.dto.response.ProductDetailResponse;
 import com.exe.morphia3d.dto.response.ProductImageResponse;
 import com.exe.morphia3d.dto.response.ProductPartResponse;
 import com.exe.morphia3d.dto.response.ProductSummaryResponse;
+import com.exe.morphia3d.dto.response.ProductMeshAppearanceResponse;
+import com.exe.morphia3d.dto.response.ProductMeshAppearanceResponse.ProductMeshColorResponse;
+import com.exe.morphia3d.entity.Color;
 import com.exe.morphia3d.entity.MediaAsset;
+import com.exe.morphia3d.entity.Material;
+import com.exe.morphia3d.entity.MaterialColor;
 import com.exe.morphia3d.entity.Model3d;
 import com.exe.morphia3d.entity.ModelImage;
+import com.exe.morphia3d.entity.ProductGlbStructureSnapshot;
+import com.exe.morphia3d.entity.ProductMeshConfigurationRevision;
 import com.exe.morphia3d.enums.MediaKind;
 import com.exe.morphia3d.enums.ModelStatus;
 import com.exe.morphia3d.enums.ModelType;
 import com.exe.morphia3d.repository.Model3dRepository;
 import com.exe.morphia3d.repository.ModelImageRepository;
 import com.exe.morphia3d.repository.ModelPartRepository;
+import com.exe.morphia3d.repository.MaterialColorRepository;
+import com.exe.morphia3d.repository.MaterialRepository;
+import com.exe.morphia3d.repository.ProductGlbStructureSnapshotRepository;
+import com.exe.morphia3d.repository.ProductMeshConfigurationRevisionRepository;
 import com.exe.morphia3d.service.MediaUrlResolver;
+import com.exe.morphia3d.service.glb.GlbStructure;
 import com.exe.morphia3d.service.ProductService;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.exe.morphia3d.utils.ModelUrlResolver;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
@@ -30,6 +43,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.UUID;
 
 @Service
 public class ProductServiceImpl implements ProductService {
@@ -42,6 +59,10 @@ public class ProductServiceImpl implements ProductService {
     private final ModelPartRepository partRepository;
     private final ModelUrlResolver modelUrlResolver;
     private final MediaUrlResolver mediaUrlResolver;
+    private final ProductGlbStructureSnapshotRepository structureSnapshots;
+    private final ProductMeshConfigurationRevisionRepository meshConfigurations;
+    private final MaterialRepository materialRepository;
+    private final MaterialColorRepository materialColorRepository;
     private final String imageBaseUrl;
 
     public ProductServiceImpl(Model3dRepository modelRepository,
@@ -49,12 +70,20 @@ public class ProductServiceImpl implements ProductService {
                               ModelPartRepository partRepository,
                               ModelUrlResolver modelUrlResolver,
                               MediaUrlResolver mediaUrlResolver,
+                              ProductGlbStructureSnapshotRepository structureSnapshots,
+                              ProductMeshConfigurationRevisionRepository meshConfigurations,
+                              MaterialRepository materialRepository,
+                              MaterialColorRepository materialColorRepository,
                               @Value("${cloudinary.base-url}") String imageBaseUrl) {
         this.modelRepository = modelRepository;
         this.imageRepository = imageRepository;
         this.partRepository = partRepository;
         this.modelUrlResolver = modelUrlResolver;
         this.mediaUrlResolver = mediaUrlResolver;
+        this.structureSnapshots = structureSnapshots;
+        this.meshConfigurations = meshConfigurations;
+        this.materialRepository = materialRepository;
+        this.materialColorRepository = materialColorRepository;
         this.imageBaseUrl = imageBaseUrl;
     }
 
@@ -96,9 +125,93 @@ public class ProductServiceImpl implements ProductService {
                 .map(part -> new ProductPartResponse(part.getPartName(), part.getPartKey()))
                 .toList();
 
+        String modelUrl = resolveModelUrl(model);
+        List<ProductMeshAppearanceResponse> meshAppearances = resolveMeshAppearances(model, modelUrl);
         return new ProductDetailResponse(model.getId(), model.getName(), model.getSlug(), model.getDescription(),
-                model.getCategory(), images, resolveModelUrl(model), model.getSizeXMm(),
-                model.getSizeYMm(), model.getSizeZMm(), parts);
+                model.getCategory(), images, modelUrl, model.getSizeXMm(),
+                model.getSizeYMm(), model.getSizeZMm(), parts, meshAppearances);
+    }
+
+    private List<ProductMeshAppearanceResponse> resolveMeshAppearances(Model3d product, String modelUrl) {
+        MediaAsset asset = product.getMediaAsset();
+        if (asset == null || asset.getId() == null || modelUrl == null || modelUrl.isBlank()) return List.of();
+
+        ProductGlbStructureSnapshot snapshot = structureSnapshots
+                .findFirstByProductIdAndMediaAssetIdOrderBySnapshotRevisionDesc(product.getId(), asset.getId())
+                .orElse(null);
+        if (snapshot == null || !snapshot.getProductId().equals(product.getId())
+                || !snapshot.getMediaAssetId().equals(asset.getId())) return List.of();
+
+        ProductMeshConfigurationRevision revision = meshConfigurations
+                .findFirstByProductIdAndMediaAssetIdAndStructureSnapshotIdOrderByConfigRevisionDesc(
+                        product.getId(), asset.getId(), snapshot.getStructureSnapshotId())
+                .orElse(null);
+        if (revision == null) return List.of();
+
+        GlbStructure structure;
+        JsonNode meshes;
+        try {
+            structure = snapshot.readStructure();
+            meshes = revision.getConfigurationJson().path("meshes");
+        } catch (RuntimeException invalidHistory) {
+            return List.of();
+        }
+        if (!revision.getProductId().equals(product.getId()) || !revision.getMediaAssetId().equals(asset.getId())
+                || !revision.getStructureSnapshotId().equals(snapshot.getStructureSnapshotId())
+                || !meshes.isArray() || meshes.size() != structure.primitiveOccurrences().size()) return List.of();
+
+        Material material = materialRepository.findById(revision.getMaterialId()).orElse(null);
+        if (material == null || material.getId() == null || material.getName() == null) return List.of();
+        Map<Integer, Color> catalogColors = new HashMap<>();
+        for (MaterialColor link : materialColorRepository.findAllByMaterial_Id(material.getId())) {
+            if (link.getColor() != null && link.getColor().getId() != null) {
+                catalogColors.put(link.getColor().getId(), link.getColor());
+            }
+        }
+
+        Map<String, GlbStructure.PrimitiveOccurrence> occurrences = new HashMap<>();
+        structure.primitiveOccurrences().forEach(occurrence -> occurrences.put(
+                occurrenceKey(occurrence.nodeIndex(), occurrence.meshIndex(), occurrence.primitiveIndex()), occurrence));
+        Set<String> seen = new HashSet<>();
+        List<ProductMeshAppearanceResponse> result = new ArrayList<>(meshes.size());
+        for (JsonNode mesh : meshes) {
+            if (!mesh.isObject() || !mesh.path("nodeIndex").canConvertToInt()
+                    || !mesh.path("meshIndex").canConvertToInt() || !mesh.path("primitiveIndex").canConvertToInt()
+                    || !mesh.path("customizable").isBoolean() || !mesh.path("defaultColorId").canConvertToInt()
+                    || !mesh.path("allowedColorIds").isArray()) return List.of();
+            int nodeIndex = mesh.path("nodeIndex").intValue();
+            int meshIndex = mesh.path("meshIndex").intValue();
+            int primitiveIndex = mesh.path("primitiveIndex").intValue();
+            String key = occurrenceKey(nodeIndex, meshIndex, primitiveIndex);
+            boolean customizable = mesh.path("customizable").booleanValue();
+            int defaultColorId = mesh.path("defaultColorId").intValue();
+            JsonNode allowedIds = mesh.path("allowedColorIds");
+            if (!occurrences.containsKey(key) || !seen.add(key) || defaultColorId <= 0
+                    || (!customizable && !allowedIds.isEmpty()) || (customizable && allowedIds.isEmpty())) return List.of();
+            Color defaultColor = catalogColors.get(defaultColorId);
+            if (defaultColor == null) return List.of();
+            List<ProductMeshColorResponse> allowedColors = new ArrayList<>();
+            Set<Integer> allowedSeen = new HashSet<>();
+            for (JsonNode allowed : allowedIds) {
+                if (!allowed.canConvertToInt() || allowed.intValue() <= 0 || !allowedSeen.add(allowed.intValue())) return List.of();
+                Color color = catalogColors.get(allowed.intValue());
+                if (color == null) return List.of();
+                allowedColors.add(toMeshColor(color));
+            }
+            if (customizable && !allowedSeen.contains(defaultColorId)) return List.of();
+            result.add(new ProductMeshAppearanceResponse(nodeIndex, meshIndex, primitiveIndex, customizable,
+                    toMeshColor(defaultColor), List.copyOf(allowedColors), material.getId(), material.getName()));
+        }
+        if (seen.size() != occurrences.size()) return List.of();
+        return List.copyOf(result);
+    }
+
+    private ProductMeshColorResponse toMeshColor(Color color) {
+        return new ProductMeshColorResponse(color.getId(), color.getName(), color.getHexCode());
+    }
+
+    private String occurrenceKey(int nodeIndex, int meshIndex, int primitiveIndex) {
+        return nodeIndex + ":" + meshIndex + ":" + primitiveIndex;
     }
 
     private ProductSummaryResponse toSummary(Model3d model, ModelImage thumbnail) {

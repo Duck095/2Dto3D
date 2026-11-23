@@ -81,7 +81,7 @@ public class DesignProjectExceptionHandler {
     @ExceptionHandler(MediaValidationException.class)
     public ResponseEntity<ErrorResponse> mediaValidation(MediaValidationException failure) {
         HttpStatus status = switch (failure.getReason()) {
-            case CONTENT_MISMATCH, UNSUPPORTED_EXTENSION, UNSUPPORTED_MIME_TYPE, INVALID_GLB ->
+            case CONTENT_MISMATCH, UNSUPPORTED_EXTENSION, UNSUPPORTED_MIME_TYPE, INVALID_GLB, INVALID_3MF ->
                     HttpStatus.UNSUPPORTED_MEDIA_TYPE;
             case TOO_LARGE, TOO_MANY_IMAGES, IMAGE_DIMENSIONS_EXCEEDED -> HttpStatus.PAYLOAD_TOO_LARGE;
             case MISSING_FILE, MALFORMED_IMAGE, MALFORMED_REQUEST -> HttpStatus.BAD_REQUEST;
@@ -91,6 +91,7 @@ public class DesignProjectExceptionHandler {
             case UNSUPPORTED_EXTENSION -> "DESIGN_MEDIA_UNSUPPORTED_EXTENSION";
             case UNSUPPORTED_MIME_TYPE -> "DESIGN_MEDIA_UNSUPPORTED_MIME_TYPE";
             case INVALID_GLB -> "DESIGN_MEDIA_INVALID_GLB";
+            case INVALID_3MF -> "DESIGN_MEDIA_INVALID_3MF";
             case TOO_LARGE -> "DESIGN_MEDIA_TOO_LARGE";
             case TOO_MANY_IMAGES -> "DESIGN_MEDIA_TOO_MANY_IMAGES";
             case IMAGE_DIMENSIONS_EXCEEDED -> "DESIGN_MEDIA_IMAGE_DIMENSIONS_EXCEEDED";
@@ -100,7 +101,7 @@ public class DesignProjectExceptionHandler {
         };
         String message = switch (failure.getReason()) {
             case CONTENT_MISMATCH -> "The uploaded image content does not match its declared format.";
-            case UNSUPPORTED_EXTENSION, UNSUPPORTED_MIME_TYPE, INVALID_GLB ->
+            case UNSUPPORTED_EXTENSION, UNSUPPORTED_MIME_TYPE, INVALID_GLB, INVALID_3MF ->
                     "The uploaded media format is not supported.";
             case TOO_LARGE, TOO_MANY_IMAGES, IMAGE_DIMENSIONS_EXCEEDED ->
                     "The uploaded media exceeds the configured limits.";

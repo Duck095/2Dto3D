@@ -45,6 +45,13 @@ test('storefront preview can preserve cloned GLB materials without changing othe
     assert.match(viewer, /this\.props\.message \|\| 'The generated file is temporarily unavailable/);
 });
 
+test('GLB viewer applies only exact allowlisted occurrence appearances to cloned materials', () => {
+    assert.match(viewer, /mapGltfMeshAppearanceTargets\(sourceScene, model, associations\)/);
+    assert.match(viewer, /applyMeshAppearanceColors\(preparedModel\.appearanceTargets, meshAppearances, selectedMeshColors\)/);
+    assert.match(viewer, /meshAppearances=\{meshAppearances\}/);
+    assert.match(viewer, /selectedMeshColors=\{selectedMeshColors\}/);
+});
+
 test('viewer reports confirmed color and scale changes through the parent callback without prop-effect callbacks', () => {
     assert.match(viewer, /onCustomizationChange/);
     assert.match(viewer, /function emitCustomizationChange/);

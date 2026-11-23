@@ -202,7 +202,7 @@ class Admin3dRealE2ePostgresAcceptanceTest {
             return new MediaUploadResult(MediaProvider.CLOUDINARY, "test-cloud",
                     "fake-e2e-asset-" + intent.mediaAssetId() + "-" + UUID.randomUUID(), intent.publicId(),
                     intent.mediaKind(), intent.resourceType(), intent.deliveryType(), format, bytes.length, 1L,
-                    "https://res.cloudinary.com/test-cloud/" + intent.resourceType() + "/upload/v1/"
+                    "https://res.cloudinary.com/test-cloud/" + intent.resourceType() + "/" + intent.deliveryType() + "/v1/"
                             + intent.publicId() + suffix);
         }).when(storage).upload(any(), any());
 
@@ -262,26 +262,33 @@ class Admin3dRealE2ePostgresAcceptanceTest {
                 SELECT material_id FROM product_mesh_configuration_revisions
                 WHERE product_id=? AND config_revision=1
                 """, Integer.class, productId);
-        assertThat(persistedMaterialId).isEqualTo(materialId);
+        assertThat(persistedMaterialId).isEqualTo(result.path("materialId").asInt());
         assertThat(revision.path("meshes")).hasSize(2);
         assertThat(revision.path("meshes").get(0).path("customizable").asBoolean()).isTrue();
         assertThat(revision.path("meshes").get(0).path("allowedColorIds").toString())
-                .contains(whiteColorId + "", blueColorId + "");
+                .contains(result.path("whiteColorId").asText(), result.path("blueColorId").asText());
         assertThat(revision.path("meshes").get(1).path("customizable").asBoolean()).isFalse();
-        assertThat(revision.path("meshes").get(1).path("defaultColorId").asInt()).isEqualTo(whiteColorId);
+        assertThat(revision.path("meshes").get(1).path("defaultColorId").asInt())
+                .isEqualTo(result.path("whiteColorId").asInt());
         assertThat(runtimeJdbc.queryForObject("""
                 SELECT count(*) FROM product_mesh_configuration_revisions WHERE product_id=?
                 """, Integer.class, productId)).isEqualTo(2);
 
-        assertThat(storedUploads).hasSize(2);
+        assertThat(storedUploads).hasSize(3);
         assertThat(storedUploads.stream().map(StoredUpload::kind).toList())
-                .containsExactly(MediaKind.MODEL_3D, MediaKind.IMAGE);
+                .containsExactly(MediaKind.MODEL_3D, MediaKind.IMAGE, MediaKind.PRINT_3MF);
         String glbSha = result.path("fixtureGlbSha256").asText();
         StoredUpload storedGlb = storedUploads.get(0);
         assertThat(storedGlb.sha256()).isEqualTo(glbSha);
         assertThat(storedGlb.bytes()).hasSize(result.path("fixtureGlbBytes").asInt());
         assertThat(storedUploads.get(1).sha256()).isEqualTo(result.path("fixtureImageSha256").asText());
-        verify(storage, times(2)).upload(any(), any());
+        assertThat(storedUploads.get(2).sha256()).isEqualTo(result.path("fixture3mfSha256").asText());
+        assertThat(storedUploads.get(2).bytes()).hasSize(result.path("fixture3mfBytes").asInt());
+        assertThat(runtimeJdbc.queryForObject("SELECT count(*) FROM product_print_assets WHERE product_id=?",
+                Integer.class, result.path("productId").asInt())).isEqualTo(1);
+        assertThat(runtimeJdbc.queryForObject("SELECT uploaded_by FROM product_print_assets WHERE product_id=?",
+                Integer.class, result.path("productId").asInt())).isEqualTo(adminId);
+        verify(storage, times(3)).upload(any(), any());
         verify(storage, never()).delete(any());
 
         assertThat(meshSpools()).as("chunked >32 MiB body leaves no request spool")
@@ -314,7 +321,7 @@ class Admin3dRealE2ePostgresAcceptanceTest {
                         java.util.Map.entry("requestSpoolCleanupVerified", true))));
 
         legacyUploadWithFeatureFlagOff();
-        verify(storage, times(4)).upload(any(), any());
+        verify(storage, times(5)).upload(any(), any());
 
         String token = loginToken(ADMIN_EMAIL, ADMIN_PASSWORD);
         String outageUri = "http://127.0.0.1:" + backendPort
@@ -487,7 +494,22 @@ class Admin3dRealE2ePostgresAcceptanceTest {
         }
         int exit = playwright.exitValue();
         Files.writeString(EVIDENCE.resolve("playwright.exit"), Integer.toString(exit), StandardCharsets.US_ASCII);
-        assertThat(exit).as("focused real browser acceptance; see task evidence attempt6/playwright.log").isZero();
+        if (exit != 0) {
+            String diagnostic = Files.readString(EVIDENCE.resolve("playwright.log"), StandardCharsets.UTF_8)
+                    .replace(ADMIN_EMAIL, "[test-admin]")
+                    .replace(ADMIN_PASSWORD, "[redacted]")
+                    .replace(SECOND_ADMIN_EMAIL, "[test-admin-2]")
+                    .replace(SECOND_ADMIN_PASSWORD, "[redacted]")
+                    .replace(USER_EMAIL, "[test-user]")
+                    .replace(USER_PASSWORD, "[redacted]")
+                    .replaceAll("(?i)Bearer\\s+[^\\s\\\"']+", "Bearer [redacted]")
+                    .replaceAll("\\beyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\b", "[redacted JWT]");
+            if (diagnostic.length() > 20_000) {
+                diagnostic = diagnostic.substring(diagnostic.length() - 20_000);
+            }
+            System.err.println("Admin 3D Playwright failure details (credentials redacted):\n" + diagnostic);
+        }
+        assertThat(exit).as("focused real browser acceptance; see task evidence playwright.log").isZero();
     }
 
     private void legacyUploadWithFeatureFlagOff() throws Exception {
@@ -629,6 +651,8 @@ class Admin3dRealE2ePostgresAcceptanceTest {
         Flyway.configure().dataSource(postgres.getJdbcUrl(), "admin3d_migrator", MIGRATOR_PASSWORD)
                 .locations("classpath:db/migration").schemas("public").defaultSchema("public")
                 .cleanDisabled(true).load().migrate();
+        bootstrap.update("INSERT INTO public.admin3d_publication_policy(singleton, cloud_name) VALUES (TRUE, 'test-cloud') "
+                + "ON CONFLICT (singleton) DO UPDATE SET cloud_name = EXCLUDED.cloud_name");
         Flyway.configure().dataSource(postgres.getJdbcUrl(), "admin3d_migrator", MIGRATOR_PASSWORD)
                 .locations("classpath:db/migration").schemas("public").defaultSchema("public").load().validate();
         BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
