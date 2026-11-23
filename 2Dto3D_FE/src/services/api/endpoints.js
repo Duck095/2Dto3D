@@ -76,7 +76,10 @@ export const ENDPOINTS = Object.freeze({
     MESH_CONFIGURATIONS: (id) => `/admin/products/${encodeURIComponent(id)}/mesh-configurations`,
   }),
 
-  ADMIN_MATERIALS: Object.freeze({ LIST: '/materials/' }),
+  ADMIN_MATERIALS: Object.freeze({
+    LIST: '/materials/', CREATE: '/materials/create', UPDATE: id => `/materials/${encodeURIComponent(id)}`,
+    COLORS: '/colors/', CREATE_COLOR: '/colors/create',
+  }),
 
   TASKS: Object.freeze({
     LIST: '/admin/tasks',

@@ -289,12 +289,14 @@ test('admin product adapter uses the shared client and metadata-only PATCH', asy
   assert.match(source, /headers:\s*\{\s*'Content-Type': undefined\s*\}/);
 });
 
-test('materials service is GET-only and screen makes no compatibility or mutation claim', async () => {
-  const source = await readFile(new URL('./adminProductApi.js', import.meta.url), 'utf8');
+test('Admin materials screen uses the catalog service while product API stays scoped to product operations', async () => {
+  const source = await readFile(new URL('../materials/adminMaterialApi.js', import.meta.url), 'utf8');
   const page = await readFile(new URL('../../../pages/admin/AdminMaterialsPage.jsx', import.meta.url), 'utf8');
-  assert.match(source, /apiClient\.get\(ENDPOINTS\.ADMIN_MATERIALS\.LIST/);
-  assert.doesNotMatch(source, /apiClient\.(post|put|patch|delete)\(ENDPOINTS\.ADMIN_MATERIALS/);
-  assert.match(page, /Danh sách vật liệu và màu toàn cục — chưa xác định tương thích cho từng sản phẩm\./);
+  assert.match(source, /client\.get\(ENDPOINTS\.ADMIN_MATERIALS\.COLORS/);
+  assert.match(source, /client\.post\(ENDPOINTS\.ADMIN_MATERIALS\.CREATE_COLOR/);
+  assert.match(source, /client\.post\(ENDPOINTS\.ADMIN_MATERIALS\.CREATE/);
+  assert.match(source, /client\.put\(ENDPOINTS\.ADMIN_MATERIALS\.UPDATE/);
+  assert.match(page, /Quản lý danh mục màu và vật liệu/);
 });
 
 const structureFixture = {

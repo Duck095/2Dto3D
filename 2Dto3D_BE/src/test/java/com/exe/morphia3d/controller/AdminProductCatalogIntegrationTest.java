@@ -378,6 +378,19 @@ class AdminProductCatalogIntegrationTest {
     }
 
     @Test
+    void colorCatalogIncludesUnassignedColorsInStableOrder() throws Exception {
+        jdbc.update("insert into colors (name, hex_code) values (?, ?)", "AT catalog color Zulu", "#123456");
+        jdbc.update("insert into colors (name, hex_code) values (?, ?)", "AT catalog color Alpha", "#654321");
+
+        mvc.perform(get("/api/colors/"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].name").value("AT catalog color Alpha"))
+                .andExpect(jsonPath("$[0].hexCode").value("#654321"))
+                .andExpect(jsonPath("$[1].name").value("AT catalog color Zulu"))
+                .andExpect(jsonPath("$[1].hexCode").value("#123456"));
+    }
+
+    @Test
     void creatingMaterialWithUnknownColorIdReturnsNotFoundInsteadOfServerError() throws Exception {
         mvc.perform(post("/api/materials/create")
                         .with(user("catalog-admin").roles("ADMIN"))

@@ -13,6 +13,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.List;
+
 @Service
 @RequiredArgsConstructor
 public class ColorServiceImpl implements ColorService {
@@ -58,5 +60,13 @@ public class ColorServiceImpl implements ColorService {
         }
 
         return colorMapper.toResponse(color);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ColorResponse> getAllColors() {
+        return colorRepository.findAllByOrderByNameAscIdAsc().stream()
+                .map(colorMapper::toResponse)
+                .toList();
     }
 }
