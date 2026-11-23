@@ -494,7 +494,22 @@ class Admin3dRealE2ePostgresAcceptanceTest {
         }
         int exit = playwright.exitValue();
         Files.writeString(EVIDENCE.resolve("playwright.exit"), Integer.toString(exit), StandardCharsets.US_ASCII);
-        assertThat(exit).as("focused real browser acceptance; see task evidence attempt6/playwright.log").isZero();
+        if (exit != 0) {
+            String diagnostic = Files.readString(EVIDENCE.resolve("playwright.log"), StandardCharsets.UTF_8)
+                    .replace(ADMIN_EMAIL, "[test-admin]")
+                    .replace(ADMIN_PASSWORD, "[redacted]")
+                    .replace(SECOND_ADMIN_EMAIL, "[test-admin-2]")
+                    .replace(SECOND_ADMIN_PASSWORD, "[redacted]")
+                    .replace(USER_EMAIL, "[test-user]")
+                    .replace(USER_PASSWORD, "[redacted]")
+                    .replaceAll("(?i)Bearer\\s+[^\\s\\\"']+", "Bearer [redacted]")
+                    .replaceAll("\\beyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\b", "[redacted JWT]");
+            if (diagnostic.length() > 20_000) {
+                diagnostic = diagnostic.substring(diagnostic.length() - 20_000);
+            }
+            System.err.println("Admin 3D Playwright failure details (credentials redacted):\n" + diagnostic);
+        }
+        assertThat(exit).as("focused real browser acceptance; see task evidence playwright.log").isZero();
     }
 
     private void legacyUploadWithFeatureFlagOff() throws Exception {
