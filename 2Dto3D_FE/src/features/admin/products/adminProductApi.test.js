@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createAdminProductMediaApi, createAdminProductMeshApi } from './adminProductApi.js';
+import { createAdminProductMediaApi, createAdminProductMeshApi, createAdminProductPrintAssetApi } from './adminProductApi.js';
 import { isPublishedAdminProductMedia } from './adminProductContract.js';
 
 const structure = {
@@ -60,4 +60,31 @@ test('mesh API rejects malformed GET and PUT responses instead of presenting the
   });
   await assert.rejects(api.getConfiguration(17, structure), /hợp đồng/i);
   await assert.rejects(api.putConfiguration(17, {}, structure), /hợp đồng/i);
+});
+
+test('print asset API posts multipart file and returns metadata without a storage URL', async () => {
+  const calls = [];
+  const response = { mediaAssetId: 8, fileName: 'part.3mf', byteCount: 128, status: 'ATTACHED', uploadedAt: '2026-11-23T08:00:00Z' };
+  const api = createAdminProductPrintAssetApi({
+    post: async (...args) => { calls.push(['post', ...args]); return response; },
+    get: async (...args) => { calls.push(['get', ...args]); return [response]; },
+  });
+  const controller = new AbortController();
+  const file = new File(['3mf'], 'part.3mf');
+  assert.deepEqual(await api.upload(17, file), response);
+  assert.equal(calls[0][1], '/admin/products/17/print-assets');
+  assert.equal(calls[0][2].get('file').name, file.name);
+  assert.equal(await calls[0][2].get('file').text(), '3mf');
+  assert.equal(calls[0][3].headers['Content-Type'], undefined);
+  assert.deepEqual(await api.list(17, { signal: controller.signal }), [response]);
+  assert.deepEqual(calls[1], ['get', '/admin/products/17/print-assets', { signal: controller.signal }]);
+});
+
+test('print asset API rejects unsafe metadata and malformed upload responses', async () => {
+  const api = createAdminProductPrintAssetApi({
+    post: async () => ({ mediaAssetId: 8, fileName: 'part.3mf', byteCount: 128, status: 'ATTACHED', uploadedAt: '2026-11-23T08:00:00Z', downloadUrl: 'https://secret' }),
+    get: async () => [{ mediaAssetId: 8, fileName: 'part.3mf', byteCount: 128, status: 'ATTACHED', uploadedAt: '2026-11-23T08:00:00Z', storagePath: 'secret' }],
+  });
+  await assert.rejects(api.upload(17, new File(['x'], 'part.3mf')), /hợp đồng/i);
+  await assert.rejects(api.list(17), /hợp đồng/i);
 });

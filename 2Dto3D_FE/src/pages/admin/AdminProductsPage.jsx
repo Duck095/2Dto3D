@@ -11,8 +11,8 @@ import StatusBadge from '../../components/admin/StatusBadge';
 import Button from '../../components/ui/Button';
 import EmptyState from '../../components/ui/EmptyState';
 import ErrorState from '../../components/ui/ErrorState';
-import { archiveAdminProduct, createAdminProductDraft, getAdminProduct, getPublishedAdminProductMedia, listAdminProducts, publishAdminProduct, updateAdminProduct } from '../../features/admin/products/adminProductApi';
-import { buildMetadataPayload, classifyAdminApiError, getAdminMutationErrorMessage, inspectGlbScene, validateGlbFile, validateOfflineGlb } from '../../features/admin/products/adminProductContract';
+import { archiveAdminProduct, createAdminProductDraft, getAdminProduct, getPublishedAdminProductMedia, listAdminProductPrintAssets, listAdminProducts, publishAdminProduct, updateAdminProduct, uploadAdminProductPrintAsset } from '../../features/admin/products/adminProductApi';
+import { buildMetadataPayload, classifyAdminApiError, getAdminMutationErrorMessage, inspectGlbScene, validateGlbFile, validateOfflineGlb, validateThreeMfFile } from '../../features/admin/products/adminProductContract';
 import './admin-products.css';
 
 const PAGE_SIZE = 20;
@@ -21,6 +21,7 @@ const statusTone = { PENDING: 'warning', ACTIVE: 'success', INACTIVE: 'neutral' 
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const IMAGE_EXTENSIONS = /\.(jpe?g|png|webp)$/i;
 const MAX_IMAGE = 10 * 1024 * 1024;
+const printAssetStatusLabel = { PENDING_UPLOAD: 'Đang chờ tải lên', UPLOADING: 'Đang tải lên', READY: 'Đã lưu riêng tư', ATTACHED: 'Đã gắn vào sản phẩm', CLEANUP_PENDING: 'Đang chờ dọn tệp lỗi', CLEANUP_LEASED: 'Đang xử lý dọn tệp lỗi', DELETED: 'Đã xóa' };
 
 function dateLabel(value) {
   if (!value) return '—';
@@ -143,6 +144,8 @@ export default function AdminProductsPage() {
   const [editValues, setEditValues] = useState(null);
   const [editing, setEditing] = useState(false);
   const [mutation, setMutation] = useState({ id: null, action: '', message: '', error: '' });
+  const [printAssets, setPrintAssets] = useState({ items: [], loading: false, error: '', retry: 0 });
+  const [printUpload, setPrintUpload] = useState({ file: null, uploading: false, error: '', message: '' });
 
   const refresh = useCallback(() => setReload(value => value + 1), []);
   const requestSelectProduct = useCallback(nextId => {
@@ -222,6 +225,18 @@ export default function AdminProductsPage() {
   }, [selectedId, reload, sessionIdentity]);
 
   useEffect(() => {
+    if (selectedId == null) { setPrintAssets({ items: [], loading: false, error: '', retry: 0 }); setPrintUpload({ file: null, uploading: false, error: '', message: '' }); return undefined; }
+    const controller = new AbortController();
+    setPrintAssets(current => ({ ...current, loading: true, error: '' }));
+    listAdminProductPrintAssets(selectedId, { signal: controller.signal }).then(items => {
+      if (!controller.signal.aborted) setPrintAssets(current => ({ ...current, items, loading: false, error: '' }));
+    }).catch(error => {
+      if (!controller.signal.aborted) setPrintAssets(current => ({ ...current, loading: false, error: classifyAdminApiError(error).message }));
+    });
+    return () => controller.abort();
+  }, [selectedId, printAssets.retry, sessionIdentity]);
+
+  useEffect(() => {
     const product = detail.product;
     if (!product || Number(product.id) !== Number(selectedId)) {
       setPublishedPreview({ productId: null, status: 'idle', gltf: null, error: '' });
@@ -249,6 +264,24 @@ export default function AdminProductsPage() {
   }, [detail.product, selectedId, sessionIdentity, publishedMediaRetry]);
 
   const retryPublishedMedia = useCallback(() => setPublishedMediaRetry(value => value + 1), []);
+  const retryPrintAssets = useCallback(() => setPrintAssets(current => ({ ...current, retry: current.retry + 1 })), []);
+
+  const submitPrintAsset = async event => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const validationError = validateThreeMfFile(printUpload.file);
+    if (validationError) { setPrintUpload(current => ({ ...current, error: validationError, message: '' })); return; }
+    if (selectedId == null || printUpload.uploading) return;
+    setPrintUpload(current => ({ ...current, uploading: true, error: '', message: '' }));
+    try {
+      const result = await uploadAdminProductPrintAsset(selectedId, printUpload.file);
+      setPrintUpload({ file: null, uploading: false, error: '', message: `Đã lưu ${result.fileName} ở trạng thái ${printAssetStatusLabel[result.status] || result.status}.` });
+      retryPrintAssets();
+      form.reset();
+    } catch (error) {
+      setPrintUpload(current => ({ ...current, uploading: false, error: classifyAdminApiError(error).message || error.message, message: '' }));
+    }
+  };
 
   const applyFilters = event => {
     event.preventDefault();
@@ -366,6 +399,21 @@ export default function AdminProductsPage() {
         {detail.product.status === 'ACTIVE' && publishedPreview.productId === Number(selectedId) && publishedPreview.status === 'error' && <div className="admin-product-error" role="alert">{publishedPreview.error} <Button type="button" size="sm" variant="outline" onClick={retryPublishedMedia}>Thử tải lại GLB</Button></div>}
         {detail.product.status !== 'ACTIVE' && <p className="admin-product-note">GLB lưu trữ chỉ được tải lại sau khi sản phẩm được xuất bản. Bản nháp chỉ dùng preview cục bộ trong phiên đã tải lên.</p>}
         <p className="admin-product-note">Thay ảnh hoặc file GLB chưa được hỗ trợ trong phiên bản này.</p>
+        <section className="admin-print-assets" aria-labelledby="admin-print-assets-title">
+          <div className="admin-product-section-heading"><div><p className="admin-products-kicker">TỆP SẢN XUẤT RIÊNG TƯ</p><h4 id="admin-print-assets-title">Tệp 3MF</h4></div></div>
+          <p className="admin-product-note">Tệp được lưu riêng cho vận hành Admin. Khách không nhận liên kết tải xuống. Chọn tệp 3MF tối đa 50 MiB.</p>
+          <form className="admin-product-form" onSubmit={submitPrintAsset} noValidate>
+            <AdminTextField as="input" type="file" label="Tệp in 3D (.3mf)" name="print-asset" accept=".3mf" onChange={event => setPrintUpload({ file: event.target.files?.[0] || null, uploading: false, error: '', message: '' })} />
+            {printUpload.file && <p>{printUpload.file.name} · {(printUpload.file.size / (1024 * 1024)).toFixed(2)} MiB</p>}
+            {printUpload.error && <p className="admin-product-error" role="alert">{printUpload.error}</p>}
+            {printUpload.message && <p className="admin-product-notice" role="status">{printUpload.message}</p>}
+            <div className="admin-product-actions"><Button type="submit" loading={printUpload.uploading} disabled={printUpload.uploading || !printUpload.file}>{printUpload.uploading ? 'Đang tải tệp 3MF…' : 'Tải 3MF lên'}</Button></div>
+          </form>
+          {printAssets.loading && <p role="status">Đang tải danh sách tệp 3MF…</p>}
+          {printAssets.error && <div className="admin-product-error" role="alert">{printAssets.error} <Button type="button" size="sm" variant="outline" onClick={retryPrintAssets}>Thử tải lại danh sách 3MF</Button></div>}
+          {!printAssets.loading && !printAssets.error && !printAssets.items.length && <p className="admin-product-note">Chưa có tệp 3MF. Không có liên kết tải xuống.</p>}
+          {!printAssets.loading && printAssets.items.length > 0 && <div className="admin-print-assets__history" aria-label="Lịch sử tệp 3MF"><ul>{printAssets.items.map(asset => <li key={asset.mediaAssetId}><strong>{asset.fileName}</strong><span>{(asset.byteCount / (1024 * 1024)).toFixed(2)} MiB</span><span>{printAssetStatusLabel[asset.status] || 'Trạng thái chưa biết'}</span><time dateTime={asset.uploadedAt}>{dateLabel(asset.uploadedAt)}</time></li>)}</ul><p className="admin-product-note">Chỉ hiển thị metadata; không có liên kết tải xuống.</p></div>}
+        </section>
         <form className="admin-product-form" onSubmit={submitEdit} noValidate><AdminTextField label="Tên sản phẩm" name="edit-name" value={editValues.name || ''} maxLength={150} required onChange={event => setEditValues(value => ({ ...value, name: event.target.value }))} /><AdminTextField label="Danh mục" name="edit-category" value={editValues.category || ''} maxLength={100} onChange={event => setEditValues(value => ({ ...value, category: event.target.value }))} /><AdminTextField as="textarea" label="Mô tả" name="edit-description" value={editValues.description || ''} maxLength={255} onChange={event => setEditValues(value => ({ ...value, description: event.target.value }))} />
           {mutation.id === selectedId && mutation.error && <p role="alert" className="admin-product-error">{mutation.error}</p>}<div className="admin-product-actions"><Button type="submit" loading={editing}>Lưu thông tin</Button></div></form>
       </>}

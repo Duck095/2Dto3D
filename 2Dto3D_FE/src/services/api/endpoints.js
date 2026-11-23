@@ -74,6 +74,7 @@ export const ENDPOINTS = Object.freeze({
     ARCHIVE: (id) => `/admin/products/${encodeURIComponent(id)}/archive`,
     MESH_STRUCTURE: (id) => `/admin/products/${encodeURIComponent(id)}/mesh-structure`,
     MESH_CONFIGURATIONS: (id) => `/admin/products/${encodeURIComponent(id)}/mesh-configurations`,
+    PRINT_ASSETS: (id) => `/admin/products/${encodeURIComponent(id)}/print-assets`,
   }),
 
   ADMIN_MATERIALS: Object.freeze({

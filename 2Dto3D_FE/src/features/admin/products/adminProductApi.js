@@ -1,6 +1,6 @@
 import apiClient from '../../../services/api/apiClient.js';
 import { ENDPOINTS } from '../../../services/api/endpoints.js';
-import { buildMetadataPayload, isAdminProduct, isAdminProductPage, isMaterialList, isMeshStructureResponse, isMeshConfigurationResponse, isPublishedAdminProductMedia } from './adminProductContract.js';
+import { buildMetadataPayload, isAdminProduct, isAdminProductPage, isMaterialList, isMeshStructureResponse, isMeshConfigurationResponse, isPublishedAdminProductMedia, isAdminProductPrintAssetList, validateThreeMfFile } from './adminProductContract.js';
 
 function requireProduct(value) {
   if (!isAdminProduct(value)) throw new Error('Backend trả về dữ liệu sản phẩm không đúng hợp đồng.');
@@ -82,3 +82,26 @@ const meshApi = createAdminProductMeshApi();
 export const getAdminProductMeshStructure = (...args) => meshApi.getStructure(...args);
 export const getAdminProductMeshConfiguration = (...args) => meshApi.getConfiguration(...args);
 export const putAdminProductMeshConfiguration = (...args) => meshApi.putConfiguration(...args);
+
+export function createAdminProductPrintAssetApi(client = apiClient) {
+  return {
+    async upload(productId, file) {
+      const validationError = validateThreeMfFile(file);
+      if (validationError) throw new Error(validationError);
+      const body = new FormData();
+      body.append('file', file, file.name);
+      const result = await client.post(ENDPOINTS.ADMIN_PRODUCTS.PRINT_ASSETS(productId), body, { headers: { 'Content-Type': undefined } });
+      if (!isAdminProductPrintAssetList([result])) throw new Error('Backend trả về metadata tệp 3MF không đúng hợp đồng.');
+      return result;
+    },
+    async list(productId, { signal } = {}) {
+      const result = await client.get(ENDPOINTS.ADMIN_PRODUCTS.PRINT_ASSETS(productId), { signal });
+      if (!isAdminProductPrintAssetList(result)) throw new Error('Backend trả về lịch sử tệp 3MF không đúng hợp đồng.');
+      return result;
+    },
+  };
+}
+
+const printAssetApi = createAdminProductPrintAssetApi();
+export const uploadAdminProductPrintAsset = (...args) => printAssetApi.upload(...args);
+export const listAdminProductPrintAssets = (...args) => printAssetApi.list(...args);

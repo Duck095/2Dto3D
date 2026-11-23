@@ -70,6 +70,12 @@
 .admin-product-file-info > div { min-width: 9rem; padding: .75rem .85rem; border: 1px solid #e6e3ef; border-radius: .7rem; background: #faf9fc; }
 .admin-product-file-info dt { margin-bottom: .25rem; color: #6d687d; font-size: .75rem; }
 .admin-product-file-info dd { margin: 0; font-weight: 650; overflow-wrap: anywhere; }
+.admin-print-assets { display: grid; gap: .8rem; margin: 1rem 0; padding: 1rem; border: 1px solid #ded9ed; border-radius: .85rem; background: #fcfbfe; }
+.admin-print-assets h4 { margin: .2rem 0 0; color: var(--admin-ink, #232036); font-size: 1rem; }
+.admin-print-assets__history ul { display: grid; gap: .5rem; margin: 0; padding: 0; list-style: none; }
+.admin-print-assets__history li { display: flex; align-items: center; flex-wrap: wrap; gap: .45rem .85rem; padding: .7rem .8rem; border: 1px solid #e6e3ef; border-radius: .65rem; background: #fff; font-size: .82rem; }
+.admin-print-assets__history li strong { min-width: 0; overflow-wrap: anywhere; }
+.admin-print-assets__history li time { margin-left: auto; color: var(--admin-muted, #6d687d); }
 .admin-material-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr)); gap: 1rem; margin: 0; padding: 0; list-style: none; }
 .admin-material-card { align-content: start; }
 .admin-material-status { flex: 0 0 auto; padding: .35rem .6rem; border-radius: 999px; color: #805500; background: #fff4d4; font-size: .75rem; font-weight: 750; }
