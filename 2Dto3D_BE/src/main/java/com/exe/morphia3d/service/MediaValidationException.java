@@ -12,6 +12,7 @@ public class MediaValidationException extends RuntimeException {
         MALFORMED_IMAGE,
         IMAGE_DIMENSIONS_EXCEEDED,
         INVALID_GLB,
+        INVALID_3MF,
         MALFORMED_REQUEST
     }
 

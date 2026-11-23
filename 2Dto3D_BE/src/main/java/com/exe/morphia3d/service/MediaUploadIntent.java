@@ -22,8 +22,16 @@ public record MediaUploadIntent(long mediaAssetId, UUID operationId, UUID leaseT
     }
 
     public String publicId() {
-        String folder = mediaKind == MediaKind.IMAGE ? "images" : "models";
-        String suffix = mediaKind == MediaKind.MODEL_3D ? ".glb" : "";
+        String folder = switch (mediaKind) {
+            case IMAGE -> "images";
+            case MODEL_3D -> "models";
+            case PRINT_3MF -> "print-files";
+        };
+        String suffix = switch (mediaKind) {
+            case IMAGE -> "";
+            case MODEL_3D -> ".glb";
+            case PRINT_3MF -> ".3mf";
+        };
         return "product-media/" + folder + "/" + operationId + "/" + mediaAssetId + suffix;
     }
 
@@ -32,6 +40,10 @@ public record MediaUploadIntent(long mediaAssetId, UUID operationId, UUID leaseT
     }
 
     public String deliveryType() {
-        return "upload";
+        return deliveryType(mediaKind);
+    }
+
+    public static String deliveryType(MediaKind mediaKind) {
+        return mediaKind == MediaKind.PRINT_3MF ? "authenticated" : "upload";
     }
 }

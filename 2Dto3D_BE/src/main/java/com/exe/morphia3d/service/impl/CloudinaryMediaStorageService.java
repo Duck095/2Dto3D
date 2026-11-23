@@ -137,8 +137,11 @@ public class CloudinaryMediaStorageService implements MediaStorageService {
                 "connection_request_timeout", properties.getConnectionRequestTimeoutMillis(),
                 "timeout", properties.getRequestTimeoutMillis());
         if (folderPolicy == FolderPolicy.QA_DYNAMIC_PRODUCT_MEDIA) {
-            String assetFolder = intent.mediaKind() == MediaKind.IMAGE
-                    ? "product-media/images" : "product-media/models";
+            String assetFolder = switch (intent.mediaKind()) {
+                case IMAGE -> "product-media/images";
+                case MODEL_3D -> "product-media/models";
+                case PRINT_3MF -> "product-media/print-files";
+            };
             options.put("asset_folder", assetFolder);
         }
         return options;
@@ -180,8 +183,8 @@ public class CloudinaryMediaStorageService implements MediaStorageService {
                                    String deliveryType, String format, long version) {
         try {
             URI uri = new URI(value);
-            String publicIdPath = intent.mediaKind() == MediaKind.MODEL_3D
-                    ? intent.publicId() : intent.publicId() + "." + format;
+            String publicIdPath = intent.mediaKind() == MediaKind.IMAGE
+                    ? intent.publicId() + "." + format : intent.publicId();
             String expectedPath = "/" + cloudName() + "/" + resourceType + "/" + deliveryType
                     + "/v" + version + "/" + publicIdPath;
             if (!"https".equalsIgnoreCase(uri.getScheme())
@@ -217,7 +220,11 @@ public class CloudinaryMediaStorageService implements MediaStorageService {
 
     private boolean isServerGeneratedPublicId(String publicId, MediaKind kind) {
         String[] segments = publicId.split("/", -1);
-        String expectedFolder = kind == MediaKind.IMAGE ? "images" : "models";
+        String expectedFolder = switch (kind) {
+            case IMAGE -> "images";
+            case MODEL_3D -> "models";
+            case PRINT_3MF -> "print-files";
+        };
         if (segments.length != 4 || !"product-media".equals(segments[0])
                 || !expectedFolder.equals(segments[1])) {
             return false;
@@ -231,11 +238,12 @@ public class CloudinaryMediaStorageService implements MediaStorageService {
         }
 
         String assetId = segments[3];
-        if (kind == MediaKind.MODEL_3D) {
-            if (!assetId.endsWith(".glb")) {
+        if (kind == MediaKind.MODEL_3D || kind == MediaKind.PRINT_3MF) {
+            String suffix = kind == MediaKind.MODEL_3D ? ".glb" : ".3mf";
+            if (!assetId.endsWith(suffix)) {
                 return false;
             }
-            assetId = assetId.substring(0, assetId.length() - ".glb".length());
+            assetId = assetId.substring(0, assetId.length() - suffix.length());
         } else if (assetId.contains(".")) {
             return false;
         }
@@ -251,9 +259,11 @@ public class CloudinaryMediaStorageService implements MediaStorageService {
             return false;
         }
         String normalized = normalizeFormat(format);
-        return kind == MediaKind.MODEL_3D
-                ? "glb".equals(normalized)
-                : "jpeg".equals(normalized) || "png".equals(normalized) || "webp".equals(normalized);
+        return switch (kind) {
+            case IMAGE -> "jpeg".equals(normalized) || "png".equals(normalized) || "webp".equals(normalized);
+            case MODEL_3D -> "glb".equals(normalized);
+            case PRINT_3MF -> "3mf".equals(normalized);
+        };
     }
 
     private boolean formatsMatch(String expected, String returned, MediaKind kind) {

@@ -95,7 +95,7 @@ public class MediaAssetLifecycleService {
                     .cloudName(cloudName())
                     .publicId("pending/" + operationId + "/" + UUID.randomUUID())
                     .resourceType(resourceType(specification.mediaKind()))
-                    .deliveryType("upload")
+                    .deliveryType(MediaUploadIntent.deliveryType(specification.mediaKind()))
                     .format(format)
                     .byteCount(specification.byteCount())
                     .state(MediaAssetState.PENDING_UPLOAD)
@@ -531,7 +531,7 @@ public class MediaAssetLifecycleService {
     private boolean isExpectedIdentity(MediaAsset asset) {
         return asset.getProvider() == MediaProvider.CLOUDINARY && cloudName().equals(asset.getCloudName())
                 && resourceType(asset.getMediaKind()).equals(asset.getResourceType())
-                && "upload".equals(asset.getDeliveryType())
+                && MediaUploadIntent.deliveryType(asset.getMediaKind()).equals(asset.getDeliveryType())
                 && intendedPublicId(asset).equals(asset.getPublicId());
     }
 
@@ -541,8 +541,11 @@ public class MediaAssetLifecycleService {
     }
 
     private boolean validFormat(MediaKind kind, String format) {
-        return kind == MediaKind.MODEL_3D ? "glb".equals(format)
-                : List.of("jpeg", "png", "webp").contains(format);
+        return switch (kind) {
+            case IMAGE -> List.of("jpeg", "png", "webp").contains(format);
+            case MODEL_3D -> "glb".equals(format);
+            case PRINT_3MF -> "3mf".equals(format);
+        };
     }
 
     private String normalizeFormat(String value) {
