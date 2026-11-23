@@ -10,6 +10,21 @@ export function isAdminProduct(product) {
     && PRODUCT_STATUSES.has(product.status));
 }
 
+export function isPublishedAdminProductMedia(value, expectedProductId) {
+  if (!value || Number(value.id) !== Number(expectedProductId)
+    || (value.status != null && value.status !== 'ACTIVE')
+    || typeof value.model3dUrl !== 'string') return false;
+  try {
+    const url = new URL(value.model3dUrl);
+    const match = url.pathname.match(/^\/[^/]+\/raw\/upload\/v[1-9]\d*\/product-media\/models\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/[1-9]\d*\.glb$/i);
+    return url.protocol === 'https:' && url.hostname.toLowerCase() === 'res.cloudinary.com'
+      && (url.port === '' || url.port === '443') && !url.username && !url.password
+      && !url.search && !url.hash && Boolean(match);
+  } catch {
+    return false;
+  }
+}
+
 export function isAdminProductPage(page) {
   return Boolean(page && Array.isArray(page.items) && page.items.every(isAdminProduct)
     && Number.isInteger(page.page) && page.page >= 0

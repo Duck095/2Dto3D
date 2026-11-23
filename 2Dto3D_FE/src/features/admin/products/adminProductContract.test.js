@@ -379,3 +379,13 @@ test('local GLB highlight requires matching create response, current product pat
   assert.equal(isLocalPreviewProvenanceCurrent({ ...preview, mediaAssetId: null, structureSnapshotId: null }, product, currentStructure), false);
   assert.equal(isLocalPreviewProvenanceCurrent({ ...preview, sourceFile: null }, product, currentStructure), false);
 });
+
+test('Admin product page retries published GLB after a fresh login and never falls back to persisted path or object URL', async () => {
+  const source = await readFile(new URL('../../../pages/admin/AdminProductsPage.jsx', import.meta.url), 'utf8');
+  assert.match(source, /getPublishedAdminProductMedia/);
+  assert.match(source, /loadAsync/);
+  assert.match(source, /retryPublishedMedia|RetryPublishedMedia/i);
+  assert.match(source, /status\s*===\s*'ACTIVE'/);
+  assert.doesNotMatch(source, /createObjectURL\(detail\.product\.filePath3d/);
+  assert.doesNotMatch(source, /loadAsync\(detail\.product\.filePath3d/);
+});

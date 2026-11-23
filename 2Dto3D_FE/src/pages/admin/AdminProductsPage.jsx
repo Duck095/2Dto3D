@@ -11,7 +11,7 @@ import StatusBadge from '../../components/admin/StatusBadge';
 import Button from '../../components/ui/Button';
 import EmptyState from '../../components/ui/EmptyState';
 import ErrorState from '../../components/ui/ErrorState';
-import { archiveAdminProduct, createAdminProductDraft, getAdminProduct, listAdminProducts, publishAdminProduct, updateAdminProduct } from '../../features/admin/products/adminProductApi';
+import { archiveAdminProduct, createAdminProductDraft, getAdminProduct, getPublishedAdminProductMedia, listAdminProducts, publishAdminProduct, updateAdminProduct } from '../../features/admin/products/adminProductApi';
 import { buildMetadataPayload, classifyAdminApiError, getAdminMutationErrorMessage, inspectGlbScene, validateGlbFile, validateOfflineGlb } from '../../features/admin/products/adminProductContract';
 import './admin-products.css';
 
@@ -137,6 +137,8 @@ export default function AdminProductsPage() {
   const [selectedId, setSelectedId] = useState(null);
   const [meshHasUnsavedChanges, setMeshHasUnsavedChanges] = useState(false);
   const [localUploadedModel, setLocalUploadedModel] = useState(null);
+  const [publishedPreview, setPublishedPreview] = useState({ productId: null, status: 'idle', gltf: null, error: '' });
+  const [publishedMediaRetry, setPublishedMediaRetry] = useState(0);
   const [detail, setDetail] = useState({ product: null, loading: false, error: null });
   const [editValues, setEditValues] = useState(null);
   const [editing, setEditing] = useState(false);
@@ -218,6 +220,35 @@ export default function AdminProductsPage() {
     });
     return () => controller.abort();
   }, [selectedId, reload, sessionIdentity]);
+
+  useEffect(() => {
+    const product = detail.product;
+    if (!product || Number(product.id) !== Number(selectedId)) {
+      setPublishedPreview({ productId: null, status: 'idle', gltf: null, error: '' });
+      return undefined;
+    }
+    if (product.status !== 'ACTIVE') {
+      setPublishedPreview({ productId: Number(product.id), status: 'unavailable', gltf: null, error: '' });
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    let cancelled = false;
+    setPublishedPreview({ productId: Number(product.id), status: 'loading', gltf: null, error: '' });
+    getPublishedAdminProductMedia(product.id, { signal: controller.signal }).then(({ model3dUrl }) =>
+      new GLTFLoader().loadAsync(model3dUrl)).then(gltf => {
+      if (!cancelled && !controller.signal.aborted) {
+        setPublishedPreview({ productId: Number(product.id), status: 'ready', gltf, error: '' });
+      }
+    }).catch(() => {
+      if (!cancelled && !controller.signal.aborted) {
+        setPublishedPreview({ productId: Number(product.id), status: 'error', gltf: null, error: 'Không thể tải GLB công khai đã xác thực. Hãy thử tải lại.' });
+      }
+    });
+    return () => { cancelled = true; controller.abort(); };
+  }, [detail.product, selectedId, sessionIdentity, publishedMediaRetry]);
+
+  const retryPublishedMedia = useCallback(() => setPublishedMediaRetry(value => value + 1), []);
 
   const applyFilters = event => {
     event.preventDefault();
@@ -331,11 +362,14 @@ export default function AdminProductsPage() {
     {selectedId != null && <section className="admin-product-card" aria-labelledby="admin-product-edit-title"><div className="admin-product-section-heading"><div><p className="admin-products-kicker">CHỈNH SỬA</p><h3 id="admin-product-edit-title">{detail.product?.name || `Sản phẩm ${selectedId}`}</h3></div><Button type="button" size="sm" variant="ghost" onClick={() => { if (meshHasUnsavedChanges && !window.confirm('Có thay đổi cấu hình mesh chưa lưu. Bạn có muốn đóng và bỏ thay đổi?')) return; setSelectedId(null); setEditValues(null); }}>Đóng</Button></div>
       {detail.loading ? <p role="status">Đang tải chi tiết sản phẩm…</p> : detail.error ? <ErrorState title="Không thể tải chi tiết" message={classifyAdminApiError(detail.error).message} onRetry={refresh} /> : detail.product && editValues && <>
         <dl className="admin-product-file-info"><div><dt>ID</dt><dd>{detail.product.id}</dd></div><div><dt>Mô hình hiện tại</dt><dd>{detail.product.filePath3d ? 'Đã có tệp mô hình' : 'Backend chưa cung cấp thông tin tệp'}</dd></div><div><dt>Ảnh</dt><dd>{Array.isArray(detail.product.modelImages) ? `${detail.product.modelImages.length} ảnh` : 'Backend chưa cung cấp thông tin ảnh'}</dd></div></dl>
+        {detail.product.status === 'ACTIVE' && publishedPreview.productId === Number(selectedId) && publishedPreview.status === 'loading' && <p role="status">Đang tải lại GLB đã xuất bản…</p>}
+        {detail.product.status === 'ACTIVE' && publishedPreview.productId === Number(selectedId) && publishedPreview.status === 'error' && <div className="admin-product-error" role="alert">{publishedPreview.error} <Button type="button" size="sm" variant="outline" onClick={retryPublishedMedia}>Thử tải lại GLB</Button></div>}
+        {detail.product.status !== 'ACTIVE' && <p className="admin-product-note">GLB lưu trữ chỉ được tải lại sau khi sản phẩm được xuất bản. Bản nháp chỉ dùng preview cục bộ trong phiên đã tải lên.</p>}
         <p className="admin-product-note">Thay ảnh hoặc file GLB chưa được hỗ trợ trong phiên bản này.</p>
         <form className="admin-product-form" onSubmit={submitEdit} noValidate><AdminTextField label="Tên sản phẩm" name="edit-name" value={editValues.name || ''} maxLength={150} required onChange={event => setEditValues(value => ({ ...value, name: event.target.value }))} /><AdminTextField label="Danh mục" name="edit-category" value={editValues.category || ''} maxLength={100} onChange={event => setEditValues(value => ({ ...value, category: event.target.value }))} /><AdminTextField as="textarea" label="Mô tả" name="edit-description" value={editValues.description || ''} maxLength={255} onChange={event => setEditValues(value => ({ ...value, description: event.target.value }))} />
           {mutation.id === selectedId && mutation.error && <p role="alert" className="admin-product-error">{mutation.error}</p>}<div className="admin-product-actions"><Button type="submit" loading={editing}>Lưu thông tin</Button></div></form>
       </>}
-      {detail.product && <AdminProductMeshConfiguration key={`${selectedId}:${sessionIdentity}`} productId={selectedId} backendProduct={detail.product} canPreviewGltf={localUploadedModel?.productId === Number(selectedId) && localUploadedModel?.sessionIdentity === sessionIdentity ? localUploadedModel : null} onPreviewProvenanceObserved={rememberLocalPreviewProvenance} onUnsavedChange={setMeshHasUnsavedChanges} />}
+      {detail.product && <AdminProductMeshConfiguration key={`${selectedId}:${sessionIdentity}`} productId={selectedId} backendProduct={detail.product} canPreviewGltf={localUploadedModel?.productId === Number(selectedId) && localUploadedModel?.sessionIdentity === sessionIdentity ? localUploadedModel : null} publishedPreviewGltf={publishedPreview.productId === Number(selectedId) && publishedPreview.status === 'ready' ? { productId: publishedPreview.productId, gltf: publishedPreview.gltf } : null} onPreviewProvenanceObserved={rememberLocalPreviewProvenance} onUnsavedChange={setMeshHasUnsavedChanges} />}
     </section>}
   </div>;
 }

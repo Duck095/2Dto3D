@@ -1,6 +1,6 @@
 import apiClient from '../../../services/api/apiClient.js';
 import { ENDPOINTS } from '../../../services/api/endpoints.js';
-import { buildMetadataPayload, isAdminProduct, isAdminProductPage, isMaterialList, isMeshStructureResponse, isMeshConfigurationResponse } from './adminProductContract.js';
+import { buildMetadataPayload, isAdminProduct, isAdminProductPage, isMaterialList, isMeshStructureResponse, isMeshConfigurationResponse, isPublishedAdminProductMedia } from './adminProductContract.js';
 
 function requireProduct(value) {
   if (!isAdminProduct(value)) throw new Error('Backend trả về dữ liệu sản phẩm không đúng hợp đồng.');
@@ -18,6 +18,21 @@ export async function listAdminProducts({ page = 0, size = 20, q = '', status = 
 export async function getAdminProduct(id, { signal } = {}) {
   return requireProduct(await apiClient.get(ENDPOINTS.ADMIN_PRODUCTS.DETAIL(id), { signal }));
 }
+
+export function createAdminProductMediaApi(client = apiClient) {
+  return {
+    async getPublishedAdminProductMedia(id, { signal } = {}) {
+      const product = await client.get(ENDPOINTS.PRODUCTS.DETAIL(id), { signal });
+      if (!isPublishedAdminProductMedia(product, id)) {
+        throw new Error('Backend chưa cung cấp GLB công khai hợp lệ cho sản phẩm đã xuất bản.');
+      }
+      return { productId: Number(id), model3dUrl: product.model3dUrl };
+    },
+  };
+}
+
+const productMediaApi = createAdminProductMediaApi();
+export const getPublishedAdminProductMedia = (...args) => productMediaApi.getPublishedAdminProductMedia(...args);
 
 export async function createAdminProductDraft(values, images, model) {
   const body = new FormData();

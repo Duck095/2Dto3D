@@ -106,7 +106,7 @@ function configurationMatchesDraft(configuration, draft) {
   });
 }
 
-export default function AdminProductMeshConfiguration({ productId, backendProduct, canPreviewGltf, onPreviewProvenanceObserved, onUnsavedChange }) {
+export default function AdminProductMeshConfiguration({ productId, backendProduct, canPreviewGltf, publishedPreviewGltf, onPreviewProvenanceObserved, onUnsavedChange }) {
   const { user, currentUser, sessionVersion } = useAuth();
   const sessionIdentity = `${currentUser?.id ?? user?.id ?? user?.email ?? 'unknown-session'}:${sessionVersion}`;
   const [state, setState] = useState({ key: '', status: 'loading', error: '', structure: null, configuration: null, materials: [], draft: null, savedNotice: '' });
@@ -130,11 +130,14 @@ export default function AdminProductMeshConfiguration({ productId, backendProduc
   const colorsById = useMemo(() => new Map(colors.map(color => [color.colorId, color])), [colors]);
   const isDirty = useMemo(() => Boolean(currentState.draft && currentState.configuration
     && JSON.stringify(currentState.draft) !== JSON.stringify(configurationToDraft(currentState.configuration, currentState.structure?.primitiveOccurrences || [], currentState.draft.materialId))), [currentState]);
-  const localCandidates = useMemo(() => localOccurrenceCandidates(canPreviewGltf?.gltf), [canPreviewGltf]);
+  const publishedPreviewSafe = publishedPreviewGltf?.productId === Number(productId)
+    && backendProduct?.status === 'ACTIVE' && Boolean(publishedPreviewGltf.gltf);
+  const activePreviewGltf = publishedPreviewSafe ? publishedPreviewGltf.gltf : canPreviewGltf?.gltf;
+  const localCandidates = useMemo(() => localOccurrenceCandidates(activePreviewGltf), [activePreviewGltf]);
   const provenanceSafe = useMemo(() => isLocalPreviewProvenanceCurrent(canPreviewGltf, backendProduct, currentState.structure), [canPreviewGltf, backendProduct, currentState.structure]);
-  const mapping = useMemo(() => provenanceSafe
+  const mapping = useMemo(() => (publishedPreviewSafe || provenanceSafe)
     ? mapBackendOccurrencesToLocalMeshes(currentState.structure?.primitiveOccurrences || [], localCandidates)
-    : { mapped: false, byIdentity: new Map() }, [currentState.structure, localCandidates, provenanceSafe]);
+    : { mapped: false, byIdentity: new Map() }, [currentState.structure, localCandidates, provenanceSafe, publishedPreviewSafe]);
   const mappedObjects = mapping.mapped ? new Map([...mapping.byIdentity].map(([identity, object]) => [identity, object])) : new Map();
   const isConfigurationValid = useMemo(() => {
     if (!currentState.structure || !currentState.draft || !selectedMaterial || selectedMaterial.isAvailable !== 'AVAILABLE') return false;
@@ -286,12 +289,14 @@ export default function AdminProductMeshConfiguration({ productId, backendProduc
         <option value="">Chọn material đang khả dụng</option>{currentState.materials.map(material => <option key={material.id} value={material.id} disabled={material.isAvailable !== 'AVAILABLE'}>{material.name}{material.isAvailable !== 'AVAILABLE' ? ' (không khả dụng)' : ''}</option>)}
       </select><small>Chỉ các màu do Backend trả về cho material đã chọn được dùng trong cấu hình.</small></label>
       {currentState.configuration.configured && selectedMaterial?.isAvailable !== 'AVAILABLE' && <p className="admin-product-error" role="alert">Material đã lưu hiện không khả dụng. Có thể đọc revision, nhưng không thể tạo revision mới bằng material này.</p>}
-      {canPreviewGltf?.gltf && <div className="admin-mesh-config__preview"><MeshPreview gltf={canPreviewGltf.gltf} mappedObjects={mappedObjects} selectedIdentity={selectedIdentity} onSelect={setSelectedIdentity} /></div>}
-      {!mapping.mapped && <p className="admin-product-note">{canPreviewGltf?.gltf
+      {activePreviewGltf && <div className="admin-mesh-config__preview"><MeshPreview gltf={activePreviewGltf} mappedObjects={mappedObjects} selectedIdentity={selectedIdentity} onSelect={setSelectedIdentity} /></div>}
+      {!mapping.mapped && <p className="admin-product-note">{publishedPreviewSafe
+        ? 'GLB đã xuất bản không ánh xạ duy nhất với occurrence Backend; chọn bộ phận từ danh sách bên dưới.'
+        : canPreviewGltf?.gltf
         ? provenanceSafe
           ? 'Preview GLB cục bộ không ánh xạ duy nhất với occurrence Backend; chọn bộ phận từ danh sách bên dưới.'
           : 'Preview cục bộ chưa được liên kết đủ với media asset và structure snapshot Backend hiện tại; highlight đã tắt.'
-        : 'Không có endpoint media công khai an toàn để tải GLB đã lưu. Sau khi tải lại trang, cấu hình vẫn đọc được nhưng 3D preview bị giới hạn.'}</p>}
+        : 'GLB lưu trữ chưa khả dụng. Sau khi tải lại trang, cấu hình vẫn đọc được nhưng 3D preview bị giới hạn.'}</p>}
       {mapping.mapped && selectedIdentity && <p className="admin-product-note" role="status">Primitive {selectedIdentity} đang được highlight trong preview.</p>}
       <div className="admin-mesh-config__rows">{rows.map(row => <article className={`admin-mesh-config__row${selectedIdentity === row.identity ? ' is-selected' : ''}`} key={row.identity}>
         <button type="button" className="admin-mesh-config__select" onClick={() => setSelectedIdentity(row.identity)} aria-pressed={selectedIdentity === row.identity}>{mapping.mapped ? 'Chọn trong preview' : 'Chọn occurrence Backend'}</button>

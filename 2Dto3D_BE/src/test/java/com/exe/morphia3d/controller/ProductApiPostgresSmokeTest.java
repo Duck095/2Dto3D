@@ -31,6 +31,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
+import java.util.UUID;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -61,6 +62,7 @@ class ProductApiPostgresSmokeTest {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final List<Integer> fixtureModelIds = new ArrayList<>();
     private final List<Integer> fixturePartIds = new ArrayList<>();
+    private final List<Long> fixtureMediaAssetIds = new ArrayList<>();
 
     @LocalServerPort
     private int port;
@@ -68,9 +70,12 @@ class ProductApiPostgresSmokeTest {
     @AfterEach
     void removeOnlyThisTestFixtures() {
         partRepository.deleteAllById(fixturePartIds);
+        fixtureMediaAssetIds.forEach(id -> jdbc.update("UPDATE model_3d SET media_asset_id=NULL WHERE media_asset_id=?", id));
         modelRepository.deleteAllById(fixtureModelIds);
+        fixtureMediaAssetIds.forEach(id -> jdbc.update("DELETE FROM media_asset WHERE id=?", id));
         fixturePartIds.clear();
         fixtureModelIds.clear();
+        fixtureMediaAssetIds.clear();
     }
 
     @DynamicPropertySource
@@ -163,6 +168,46 @@ class ProductApiPostgresSmokeTest {
         getJson("/api/products/" + fixtureModelIds.get(ACTIVE_PRODUCT_COUNT), HttpStatus.NOT_FOUND);
         getJson("/api/products/" + fixtureModelIds.get(ACTIVE_PRODUCT_COUNT + 1), HttpStatus.NOT_FOUND);
         getJson("/api/products/" + fixtureModelIds.get(ACTIVE_PRODUCT_COUNT + 2), HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void publicProductDetailServesOnlyAttachedValidatedGlbForActiveProducts() throws Exception {
+        Model3d active = modelRepository.saveAndFlush(model("SYS03QA media accepted", "sys03qa-media-accepted",
+                ModelType.DESIGNER_MODEL, ModelStatus.ACTIVE));
+        Model3d pending = modelRepository.saveAndFlush(model("SYS03QA media pending", "sys03qa-media-pending",
+                ModelType.DESIGNER_MODEL, ModelStatus.PENDING));
+        fixtureModelIds.add(active.getId());
+        fixtureModelIds.add(pending.getId());
+        UUID operationId = java.util.UUID.randomUUID();
+        Long assetId = jdbc.queryForObject("""
+                INSERT INTO media_asset(operation_id, media_kind, provider, cloud_name, provider_asset_id,
+                    public_id, resource_type, delivery_type, format, byte_count, provider_version, secure_url, state)
+                VALUES (?, 'MODEL_3D', 'CLOUDINARY', 'test-cloud', 'test-provider-asset', ?, 'raw', 'upload',
+                    'glb', 128, 42, ?, 'ATTACHED') RETURNING id
+                """, Long.class, operationId, "product-media/models/" + operationId + "/asset.glb",
+                "https://res.cloudinary.com/test-cloud/raw/upload/v42/product-media/models/"
+                        + operationId + "/asset.glb");
+        fixtureMediaAssetIds.add(assetId);
+        jdbc.update("UPDATE media_asset SET public_id=?, secure_url=? WHERE id=?",
+                "product-media/models/" + operationId + "/" + assetId + ".glb",
+                "https://res.cloudinary.com/test-cloud/raw/upload/v42/product-media/models/"
+                        + operationId + "/" + assetId + ".glb", assetId);
+        jdbc.update("UPDATE model_3d SET media_asset_id=? WHERE model_id=?", assetId, active.getId());
+
+        JsonNode activeDetail = getJson("/api/products/" + active.getId(), HttpStatus.OK);
+        assertThat(activeDetail.path("model3dUrl").asText()).isEqualTo(
+                "https://res.cloudinary.com/test-cloud/raw/upload/v42/product-media/models/"
+                        + operationId + "/" + assetId + ".glb");
+        getJson("/api/products/" + pending.getId(), HttpStatus.NOT_FOUND);
+
+        jdbc.update("UPDATE model_3d SET media_asset_id=NULL WHERE model_id=?", active.getId());
+        JsonNode detachedDetail = getJson("/api/products/" + active.getId(), HttpStatus.OK);
+        assertThat(detachedDetail.path("model3dUrl").isNull()).isTrue();
+
+        jdbc.update("UPDATE media_asset SET cloud_name='wrong-cloud' WHERE id=?", assetId);
+        jdbc.update("UPDATE model_3d SET media_asset_id=? WHERE model_id=?", assetId, active.getId());
+        JsonNode invalidProviderDetail = getJson("/api/products/" + active.getId(), HttpStatus.OK);
+        assertThat(invalidProviderDetail.path("model3dUrl").isNull()).isTrue();
     }
 
     private void seedCatalogFixture() {
