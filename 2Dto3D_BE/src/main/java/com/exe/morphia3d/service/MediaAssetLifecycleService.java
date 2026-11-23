@@ -10,6 +10,7 @@ import com.exe.morphia3d.repository.Model3dRepository;
 import com.exe.morphia3d.repository.ModelImageRepository;
 import com.exe.morphia3d.repository.ProductGlbStructureSnapshotRepository;
 import com.exe.morphia3d.repository.ProductMeshConfigurationRevisionRepository;
+import com.exe.morphia3d.repository.ProductPrintAssetRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManager;
 import org.springframework.data.domain.PageRequest;
@@ -39,6 +40,7 @@ public class MediaAssetLifecycleService {
     private final ModelImageRepository images;
     private final ProductGlbStructureSnapshotRepository structureSnapshots;
     private final ProductMeshConfigurationRevisionRepository configurationRevisions;
+    private final ProductPrintAssetRepository printAssets;
     private final CloudinaryIdentityProperties cloudinaryIdentity;
     private final MediaStorageProperties storageProperties;
     private final MediaLifecycleProperties lifecycleProperties;
@@ -50,6 +52,7 @@ public class MediaAssetLifecycleService {
                                       ModelImageRepository images,
                                       ProductGlbStructureSnapshotRepository structureSnapshots,
                                       ProductMeshConfigurationRevisionRepository configurationRevisions,
+                                      ProductPrintAssetRepository printAssets,
                                       CloudinaryIdentityProperties cloudinaryIdentity,
                                       MediaStorageProperties storageProperties,
                                       MediaLifecycleProperties lifecycleProperties,
@@ -60,6 +63,7 @@ public class MediaAssetLifecycleService {
         this.images = images;
         this.structureSnapshots = structureSnapshots;
         this.configurationRevisions = configurationRevisions;
+        this.printAssets = printAssets;
         this.cloudinaryIdentity = cloudinaryIdentity;
         this.storageProperties = storageProperties;
         this.lifecycleProperties = lifecycleProperties;
@@ -464,7 +468,8 @@ public class MediaAssetLifecycleService {
         boolean structureHistoryReference = structureSnapshots.existsByMediaAssetId(id);
         boolean configurationHistoryReference = configurationRevisions.existsByMediaAssetId(id);
         return currentModelReference || currentImageReference
-                || structureHistoryReference || configurationHistoryReference;
+                || structureHistoryReference || configurationHistoryReference
+                || printAssets.existsByIdMediaAssetId(id);
     }
 
     /** Refresh managed rows after the operation lock so cleanup never acts on pre-lock state. */

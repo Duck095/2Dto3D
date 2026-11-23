@@ -189,10 +189,12 @@ class MeshConfigurationPersistenceServicePostgresTest {
         cleanupSnapshots = cleanupRepositoryFactory.getRepository(ProductGlbStructureSnapshotRepository.class);
         ProductMeshConfigurationRevisionRepository cleanupConfigurations =
                 cleanupRepositoryFactory.getRepository(ProductMeshConfigurationRevisionRepository.class);
+        com.exe.morphia3d.repository.ProductPrintAssetRepository cleanupPrintAssets =
+                cleanupRepositoryFactory.getRepository(com.exe.morphia3d.repository.ProductPrintAssetRepository.class);
         CloudinaryIdentityProperties cleanupCloudIdentity = new CloudinaryIdentityProperties();
         cleanupCloudIdentity.setCloudName("local");
         cleanupLifecycle = new MediaAssetLifecycleService(cleanupMediaAssets, cleanupModels, cleanupImages,
-                cleanupSnapshots, cleanupConfigurations, cleanupCloudIdentity, new MediaStorageProperties(),
+                cleanupSnapshots, cleanupConfigurations, cleanupPrintAssets, cleanupCloudIdentity, new MediaStorageProperties(),
                 new MediaLifecycleProperties(), Clock.systemUTC(), bootstrapEntityManager);
 
         EntityManager sharedEntityManager = SharedEntityManagerCreator.createSharedEntityManager(entityManagerFactory);

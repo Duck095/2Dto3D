@@ -18,7 +18,8 @@ import org.springframework.web.multipart.support.MissingServletRequestPartExcept
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import java.util.Locale;
 
-@RestControllerAdvice(assignableTypes = {Model3dController.class, AdminProductController.class})
+@RestControllerAdvice(assignableTypes = {
+        Model3dController.class, AdminProductController.class, AdminProductPrintAssetController.class})
 public class MediaUploadExceptionHandler {
 
     @ExceptionHandler(MediaValidationException.class)
@@ -31,7 +32,7 @@ public class MediaUploadExceptionHandler {
         };
         String message = switch (status) {
             case PAYLOAD_TOO_LARGE -> "The upload exceeds the configured size or image limits";
-            case UNSUPPORTED_MEDIA_TYPE -> "Only supported JPEG, PNG, WebP, and GLB content is accepted";
+            case UNSUPPORTED_MEDIA_TYPE -> "Only supported image, GLB, and 3MF content is accepted";
             default -> "The upload request or a required file is invalid";
         };
         return response(status, message);
