@@ -631,8 +631,6 @@ class Admin3dRealE2ePostgresAcceptanceTest {
                 .cleanDisabled(true).load().migrate();
         Flyway.configure().dataSource(postgres.getJdbcUrl(), "admin3d_migrator", MIGRATOR_PASSWORD)
                 .locations("classpath:db/migration").schemas("public").defaultSchema("public").load().validate();
-        grantRuntimeUploadAndMeshPrivileges();
-
         BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
         adminId = insertUser("Admin E2E", ADMIN_EMAIL, encoder.encode(ADMIN_PASSWORD), "ADMIN");
         secondAdminId = insertUser("Admin E2E Concurrency", SECOND_ADMIN_EMAIL,
@@ -673,14 +671,6 @@ class Admin3dRealE2ePostgresAcceptanceTest {
         bootstrap.execute("GRANT USAGE, CREATE ON SCHEMA public TO admin3d_owner");
         bootstrap.execute("GRANT USAGE, CREATE ON SCHEMA public TO admin3d_migrator WITH GRANT OPTION");
         bootstrap.execute("GRANT USAGE ON SCHEMA public TO app_runtime");
-    }
-
-    private static void grantRuntimeUploadAndMeshPrivileges() {
-        bootstrap.execute("GRANT SELECT ON TABLE public.users, public.staff_profiles, public.tasks, public.colors, public.model_3d, public.model_parts, public.model_images, public.media_asset, public.materials, public.material_colors, public.product_glb_structure_snapshots, public.product_mesh_configuration_revisions TO app_runtime");
-        bootstrap.execute("GRANT INSERT ON TABLE public.model_3d, public.model_images TO app_runtime");
-        bootstrap.execute("GRANT SELECT, INSERT, UPDATE ON TABLE public.media_asset TO app_runtime");
-        bootstrap.execute("GRANT INSERT ON TABLE public.product_glb_structure_snapshots, public.product_mesh_configuration_revisions TO app_runtime");
-        bootstrap.execute("GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_runtime");
     }
 
     private static String sha256(byte[] bytes) {
