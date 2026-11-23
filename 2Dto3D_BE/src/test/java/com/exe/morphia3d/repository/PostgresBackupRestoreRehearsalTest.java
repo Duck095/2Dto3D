@@ -283,8 +283,8 @@ class PostgresBackupRestoreRehearsalTest {
         JdbcTemplate bootstrap = new JdbcTemplate(sourceDataSource);
         PostgresTestRoleProvisioning.grantSnapshotReferencePrivileges(bootstrap);
         Flyway currentSchema = flyway(sourceDataSource).load();
-        if (currentSchema.migrate().migrationsExecuted != 5) {
-            throw new IllegalStateException("Current rehearsal schema must apply V15 through V19");
+        if (currentSchema.migrate().migrationsExecuted != 6) {
+            throw new IllegalStateException("Current rehearsal schema must apply V15 through V20");
         }
         currentSchema.validate();
     }
@@ -1047,8 +1047,8 @@ class PostgresBackupRestoreRehearsalTest {
         List<String> versions = jdbc.queryForList(
                 "SELECT version FROM flyway_schema_history ORDER BY installed_rank", String.class);
         if (baselines == null || baselines != 0
-                || !versions.equals(List.of("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19"))) {
-            throw new IllegalStateException("Restored Flyway history must contain successful V1 through V19 only");
+                || !versions.equals(List.of("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20"))) {
+            throw new IllegalStateException("Restored Flyway history must contain successful V1 through V20 only");
         }
     }
 
@@ -1206,7 +1206,7 @@ class PostgresBackupRestoreRehearsalTest {
     @Test
     void restoredApplicationRoleCanReadAndUseCrudWithoutChangingFlywayOrSchemaPrivileges() {
         assertThat(applicationJdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history", Integer.class))
-                .isEqualTo(19);
+                .isEqualTo(20);
         String colorName = "R-" + UUID.randomUUID();
         Integer generatedId = applicationJdbc.queryForObject(
                 "INSERT INTO colors (name, hex_code) VALUES (?, '#654321') RETURNING color_id",

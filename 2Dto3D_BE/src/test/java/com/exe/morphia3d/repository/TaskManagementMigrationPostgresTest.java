@@ -48,7 +48,7 @@ class TaskManagementMigrationPostgresTest {
   Flyway throughV14=Flyway.configure().dataSource(ds).locations("classpath:db/migration").target(MigrationVersion.fromVersion("14")).cleanDisabled(false).load();
   assertThat(throughV14.migrate().migrationsExecuted).isEqualTo(11);
   PostgresTestRoleProvisioning.grantSnapshotReferencePrivileges(jdbc);
-  Flyway upgrade=flyway(ds);assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(5);upgrade.validate();assertTaskSchema(jdbc);assertHibernateMappings(ds);
+  Flyway upgrade=flyway(ds);assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(6);upgrade.validate();assertTaskSchema(jdbc);assertHibernateMappings(ds);
   assertThat(jdbc.queryForObject("select count(*) from users where user_id=?",Integer.class,fixture.employeeUserId)).isEqualTo(1);
   assertThat(jdbc.queryForObject("select count(*) from staff_profiles where id=?",Integer.class,fixture.staffAId)).isEqualTo(1);
   assertThat(jdbc.queryForObject("select count(*) from tasks",Integer.class)).isZero();

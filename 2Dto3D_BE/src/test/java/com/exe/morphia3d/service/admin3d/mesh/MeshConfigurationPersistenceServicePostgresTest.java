@@ -852,7 +852,7 @@ class MeshConfigurationPersistenceServicePostgresTest {
     }
 
     @Test
-    void runtimeHasSelectAndApprovedFunctionLocksWithoutParentUpdatePrivileges() {
+    void runtimeCanLockMutableRowsWithoutProductUpdatePrivileges() {
         assertThat(runtime.queryForObject("SELECT current_user", String.class)).isEqualTo("app_runtime");
         assertThat(runtime.queryForObject("SELECT COUNT(*) FROM model_3d WHERE model_id=?", Integer.class,
                 fixture.productId())).isEqualTo(1);
@@ -865,10 +865,11 @@ class MeshConfigurationPersistenceServicePostgresTest {
 
         assertSqlState("42501", () -> runtime.queryForObject("SELECT model_id FROM model_3d WHERE model_id=? FOR UPDATE",
                 Integer.class, fixture.productId()));
-        assertSqlState("42501", () -> runtime.queryForObject("SELECT id FROM media_asset WHERE id=? FOR UPDATE",
-                Long.class, fixture.mediaId()));
-        assertSqlState("42501", () -> runtime.queryForObject("SELECT material_id FROM materials WHERE material_id=? FOR UPDATE",
-                Integer.class, fixture.materialId()));
+        // Column-level UPDATE grants permit row locks, while still restricting which columns may change.
+        assertThat(runtime.queryForObject("SELECT id FROM media_asset WHERE id=? FOR UPDATE",
+                Long.class, fixture.mediaId())).isEqualTo(fixture.mediaId());
+        assertThat(runtime.queryForObject("SELECT material_id FROM materials WHERE material_id=? FOR UPDATE",
+                Integer.class, fixture.materialId())).isEqualTo(fixture.materialId());
 
         assertThat(runtime.queryForObject("SELECT pg_backend_pid()", Integer.class)).isPositive();
         transaction(TransactionDefinition.ISOLATION_READ_COMMITTED, () -> {
@@ -893,11 +894,11 @@ class MeshConfigurationPersistenceServicePostgresTest {
         assertThat(runtime.queryForObject("SELECT has_column_privilege('app_runtime','public.media_asset','id','UPDATE')",
                 Boolean.class)).isFalse();
         assertThat(runtime.queryForObject("SELECT has_column_privilege('app_runtime','public.media_asset','state','UPDATE')",
-                Boolean.class)).isFalse();
+                Boolean.class)).isTrue();
         assertThat(runtime.queryForObject("SELECT has_column_privilege('app_runtime','public.materials','material_id','UPDATE')",
                 Boolean.class)).isFalse();
         assertThat(runtime.queryForObject("SELECT has_column_privilege('app_runtime','public.materials','is_available','UPDATE')",
-                Boolean.class)).isFalse();
+                Boolean.class)).isTrue();
         assertThat(runtime.queryForObject("SELECT pg_has_role('app_runtime','admin3d_owner','MEMBER')",
                 Boolean.class)).isFalse();
         assertThat(runtime.queryForObject("SELECT has_schema_privilege('app_runtime','public','CREATE')",
@@ -921,11 +922,17 @@ class MeshConfigurationPersistenceServicePostgresTest {
 
         assertSqlState("42501", () -> runtime.update("UPDATE model_3d SET name=name WHERE model_id=?", fixture.productId()));
         assertSqlState("42501", () -> runtime.update("UPDATE model_3d SET model_id=model_id WHERE model_id=?", fixture.productId()));
-        assertSqlState("42501", () -> runtime.update("UPDATE media_asset SET state=state WHERE id=?", fixture.mediaId()));
+        assertThat(runtime.queryForObject(
+                "SELECT has_column_privilege('app_runtime','public.media_asset','state','UPDATE')", Boolean.class))
+                .isTrue();
         assertSqlState("42501", () -> runtime.update("UPDATE media_asset SET id=id WHERE id=?", fixture.mediaId()));
-        assertSqlState("42501", () -> runtime.update("UPDATE materials SET is_available=is_available WHERE material_id=?", fixture.materialId()));
+        assertThat(runtime.queryForObject(
+                "SELECT has_column_privilege('app_runtime','public.materials','is_available','UPDATE')", Boolean.class))
+                .isTrue();
         assertSqlState("42501", () -> runtime.update("UPDATE materials SET material_id=material_id WHERE material_id=?", fixture.materialId()));
-        assertSqlState("42501", () -> runtime.update("DELETE FROM material_colors WHERE material_id=?", fixture.materialId()));
+        assertThat(runtime.queryForObject(
+                "SELECT has_table_privilege('app_runtime','public.material_colors','DELETE')", Boolean.class))
+                .isTrue();
         assertSqlState("42501", () -> runtime.execute("SET ROLE admin3d_lock_owner"));
         assertThat(materialAdmin.queryForObject("SELECT rolsuper OR rolcreatedb OR rolcreaterole FROM pg_roles WHERE rolname='material_admin_test'",
                 Boolean.class)).isFalse();
