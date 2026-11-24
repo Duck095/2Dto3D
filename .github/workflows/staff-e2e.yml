@@ -179,7 +179,7 @@ jobs:
             -Dflyway.password="$MIGRATOR_PASSWORD" \
             flyway:migrate
           docker exec staff-e2e-postgres psql -X -v ON_ERROR_STOP=1 -U postgres -d morphia3d \
-            -c 'GRANT SELECT, INSERT ON TABLE public.users, public.staff_profiles TO app_runtime; GRANT USAGE ON SEQUENCE public.users_user_id_seq, public.staff_profiles_id_seq TO app_runtime'
+            -c 'GRANT SELECT, INSERT ON TABLE public.users, public.staff_profiles TO app_runtime; GRANT INSERT ON TABLE public.staff_profile_audit TO app_runtime; GRANT USAGE ON SEQUENCE public.users_user_id_seq, public.staff_profiles_id_seq, public.staff_profile_audit_id_seq TO app_runtime'
 
       - name: Package Backend without rerunning its separate CI test suite
         working-directory: 2Dto3D_BE
