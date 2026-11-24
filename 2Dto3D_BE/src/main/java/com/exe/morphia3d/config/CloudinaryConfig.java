@@ -36,6 +36,9 @@ public class CloudinaryConfig {
     private Cloudinary createClient(String cloudName, String apiKey, String apiSecret,
                                     MediaStorageProperties mediaStorageProperties, String proxyHost, int proxyPort) {
         mediaStorageProperties.validate();
+        requireConfigured(cloudName, "Cloudinary cloud name is required for real media storage");
+        requireConfigured(apiKey, "Cloudinary API key is required for real media storage");
+        requireConfigured(apiSecret, "Cloudinary API secret is required for real media storage");
         java.util.Map<String, Object> configuration = ObjectUtils.asMap("cloud_name", cloudName, "api_key", apiKey,
                 "api_secret", apiSecret, "secure", true,
                 // SDK configuration timeout is seconds; adapter calls also set per-request millisecond bounds.
@@ -45,5 +48,11 @@ public class CloudinaryConfig {
             configuration.put("proxy_port", proxyPort);
         }
         return new Cloudinary(configuration);
+    }
+
+    private void requireConfigured(String value, String message) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException(message);
+        }
     }
 }

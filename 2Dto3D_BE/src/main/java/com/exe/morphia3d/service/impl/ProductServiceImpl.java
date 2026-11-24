@@ -30,6 +30,7 @@ import com.exe.morphia3d.service.glb.GlbStructure;
 import com.exe.morphia3d.service.ProductService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.exe.morphia3d.utils.ModelUrlResolver;
+import com.exe.morphia3d.utils.CloudinaryUrlPolicy;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -235,6 +236,7 @@ public class ProductServiceImpl implements ProductService {
         }
         String path = image.getImagePath();
         if (path == null || path.isBlank()) return null;
+        if (CloudinaryUrlPolicy.isLegacyPlaceholder(path)) return null;
         if (path.startsWith("https://") || path.startsWith("http://")) return path;
         return imageBaseUrl.replaceAll("/+$", "") + "/" + path.replaceAll("^/+", "");
     }

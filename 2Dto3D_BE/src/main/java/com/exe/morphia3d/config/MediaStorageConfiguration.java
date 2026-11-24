@@ -5,6 +5,7 @@ import com.exe.morphia3d.service.MediaStorageProperties;
 import com.exe.morphia3d.service.MediaStorageService;
 import com.exe.morphia3d.service.impl.CloudinaryMediaStorageService;
 import com.exe.morphia3d.service.impl.QaDisabledMediaStorageService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
@@ -36,8 +37,14 @@ public class MediaStorageConfiguration {
     @Bean
     @Conditional(QaMediaModeCondition.NonQa.class)
     public MediaStorageService nonQaCloudinaryMediaStorageService(Cloudinary cloudinary,
-                                                                  MediaStorageProperties properties) {
-        return new CloudinaryMediaStorageService(cloudinary, properties);
+                                                                  MediaStorageProperties properties,
+                                                                  @Value("${media.storage.cloudinary-folder-policy:default}") String folderPolicy) {
+        CloudinaryMediaStorageService.FolderPolicy policy = switch (folderPolicy) {
+            case "default" -> CloudinaryMediaStorageService.FolderPolicy.DEFAULT;
+            case "local-product-media" -> CloudinaryMediaStorageService.FolderPolicy.LOCAL_PRODUCT_MEDIA;
+            default -> throw new IllegalStateException("Unsupported Cloudinary folder policy");
+        };
+        return new CloudinaryMediaStorageService(cloudinary, properties, policy);
     }
 
     @Bean

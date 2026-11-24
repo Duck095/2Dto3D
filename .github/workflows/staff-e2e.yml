@@ -178,6 +178,8 @@ jobs:
             -Dflyway.user=admin3d_migrator \
             -Dflyway.password="$MIGRATOR_PASSWORD" \
             flyway:migrate
+          docker exec staff-e2e-postgres psql -X -v ON_ERROR_STOP=1 -U postgres -d morphia3d \
+            -c 'GRANT SELECT, INSERT ON TABLE public.users, public.staff_profile_audit TO app_runtime; GRANT SELECT, INSERT, UPDATE ON TABLE public.staff_profiles TO app_runtime; GRANT USAGE ON SEQUENCE public.users_user_id_seq, public.staff_profiles_id_seq, public.staff_profile_audit_id_seq TO app_runtime'
 
       - name: Package Backend without rerunning its separate CI test suite
         working-directory: 2Dto3D_BE
@@ -187,6 +189,8 @@ jobs:
         working-directory: 2Dto3D_BE
         env:
           SPRING_PROFILES_ACTIVE: local
+          DB_USERNAME: app_runtime
+          DB_PASSWORD: ${{ env.RUNTIME_PASSWORD }}
           VNPAY_CODE: E2E_NOT_USED
           VNPAY_SECRET: E2E_NOT_USED
           MOMO_PARTNER_CODE: E2E_NOT_USED
@@ -231,7 +235,11 @@ jobs:
 
       - name: Create one-time QA users and staff profile through real APIs
         working-directory: 2Dto3D_FE
-        run: node scripts/staff-e2e-qa-bootstrap.mjs
+        run: |
+          if ! node scripts/staff-e2e-qa-bootstrap.mjs; then
+            node scripts/sanitize-staff-e2e-log.mjs "$RUNNER_TEMP/staff-e2e-backend.log"
+            exit 1
+          fi
 
       - name: Start Vite with the sibling Backend proxy
         working-directory: 2Dto3D_FE

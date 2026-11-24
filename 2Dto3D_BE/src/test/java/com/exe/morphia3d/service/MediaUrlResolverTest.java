@@ -77,6 +77,15 @@ class MediaUrlResolverTest {
         assertRejected(validImage, asset -> asset.setFormat(null));
     }
 
+    @Test
+    void neverExposesAuthenticatedThreeMfAsPublicProductUrl() {
+        MediaAsset printAsset = asset(14L, MediaKind.PRINT_3MF, "3mf", "raw", "/test-cloud/raw/authenticated/v7/"
+                + "product-media/print-files/" + OPERATION_ID + "/14.3mf");
+        printAsset.setDeliveryType("authenticated");
+
+        assertThat(resolver.resolve(printAsset, MediaKind.PRINT_3MF)).isNull();
+    }
+
     private void assertRejected(MediaAsset valid, Consumer<MediaAsset> mutation) {
         MediaAsset candidate = asset(valid.getId(), valid.getMediaKind(), valid.getFormat(), valid.getResourceType(),
                 valid.getSecureUrl().substring("https://res.cloudinary.com".length()));
@@ -94,8 +103,16 @@ class MediaUrlResolverTest {
     }
 
     private MediaAsset asset(Long id, MediaKind kind, String format, String resourceType, String urlPath) {
-        String folder = kind == MediaKind.IMAGE ? "images" : "models";
-        String suffix = kind == MediaKind.IMAGE ? "" : ".glb";
+        String folder = switch (kind) {
+            case IMAGE -> "images";
+            case MODEL_3D -> "models";
+            case PRINT_3MF -> "print-files";
+        };
+        String suffix = switch (kind) {
+            case IMAGE -> "";
+            case MODEL_3D -> ".glb";
+            case PRINT_3MF -> ".3mf";
+        };
         String publicId = "product-media/" + folder + "/" + OPERATION_ID + "/" + id + suffix;
         return MediaAsset.builder().id(id).operationId(OPERATION_ID).mediaKind(kind)
                 .provider(MediaProvider.CLOUDINARY).cloudName(CLOUD).providerAssetId("provider-asset-" + id)

@@ -75,6 +75,30 @@ class QaMediaActivationConfigurationTest {
     }
 
     @Test
+    void nonQaCloudinaryFailsClosedWhenApiCredentialsAreBlank() {
+        runner.withPropertyValues("cloudinary.cloud-name=local-cloud", "cloudinary.api-key= ",
+                        "cloudinary.api-secret=nonfunctional-test-secret")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .hasStackTraceContaining("Cloudinary API key is required for real media storage");
+                });
+    }
+
+    @Test
+    void localConfigurationSelectsScopedProductMediaFolders() {
+        runner.withPropertyValues("cloudinary.cloud-name=local-cloud", "cloudinary.api-key=123456789012",
+                        "cloudinary.api-secret=nonfunctional-test-secret",
+                        "media.storage.cloudinary-folder-policy=local-product-media")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(((CloudinaryMediaStorageService) context.getBean(MediaStorageService.class))
+                            .folderPolicy())
+                            .isEqualTo(CloudinaryMediaStorageService.FolderPolicy.LOCAL_PRODUCT_MEDIA);
+                });
+    }
+
+    @Test
     void liveRequestWithoutExplicitApprovalFailsClosed() {
         qa().withPropertyValues("app.qa-media.live-enabled=true", "app.qa-media.cloud-name=isolated-qa-cloud",
                         "app.qa-media.api-key=123456789012", "app.qa-media.api-secret=nonfunctional-test-secret",

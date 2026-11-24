@@ -22,7 +22,7 @@ load_local_env() {
         name="${BASH_REMATCH[1]}"
         value="${BASH_REMATCH[2]}"
         case "$name" in
-            BACKEND_PORT|DB_URL|DB_PASSWORD|JWT_SECRET)
+            BACKEND_PORT|DB_URL|DB_USERNAME|DB_PASSWORD|JWT_SECRET|CLOUD_NAME|API_KEY|API_SECRET)
                 ;;
             *)
                 printf 'Unsupported variable name in .env.local at line %s.\n' "$line_number" >&2
@@ -57,6 +57,11 @@ validate_local_database_config() {
         return 1
     fi
 
+    if [[ -z "${DB_USERNAME:-}" ]]; then
+        printf 'DB_USERNAME is required. Set the local runtime database account in 2Dto3D_BE/.env.local.\n' >&2
+        return 1
+    fi
+
     if [[ ! "$DB_URL" =~ ^jdbc:postgresql://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]{1,5})?/ ]]; then
         printf 'DB_URL must point to a loopback PostgreSQL host for local development; its value is not displayed.\n' >&2
         return 1
@@ -71,6 +76,12 @@ validate_local_database_config() {
 
     if [[ ! -v DB_PASSWORD ]]; then
         printf 'DB_PASSWORD must be set (it may be empty for a local trust-authenticated database).\n' >&2
+        return 1
+    fi
+
+    if [[ "$DB_URL" == 'jdbc:postgresql://127.0.0.1:55432/morphia3d_prod_prep' &&
+        "$DB_USERNAME" != 'app_runtime' ]]; then
+        printf 'The morphia3d_prod_prep local database requires DB_USERNAME=app_runtime.\n' >&2
         return 1
     fi
 

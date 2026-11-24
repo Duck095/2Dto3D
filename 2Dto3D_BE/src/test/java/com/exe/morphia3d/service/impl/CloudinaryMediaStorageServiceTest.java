@@ -30,6 +30,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -177,6 +178,37 @@ class CloudinaryMediaStorageServiceTest {
                 .containsEntry("overwrite", false)
                 .doesNotContainKey("folder");
         assertThat(result.publicId()).isEqualTo(intent.publicId());
+        verify(uploader).upload(any(InputStream.class), eq(options));
+    }
+
+    @Test
+    void localProfileUsesScopedImageModelAndPrintAssetFolders() throws Exception {
+        storage = new CloudinaryMediaStorageService(cloudinary, new MediaStorageProperties(),
+                CloudinaryMediaStorageService.FolderPolicy.LOCAL_PRODUCT_MEDIA);
+
+        assertLocalFolderUpload(MediaKind.IMAGE, "png", "image", "upload", "product-media/images");
+        assertLocalFolderUpload(MediaKind.MODEL_3D, "glb", "raw", "upload", "product-media/models");
+        assertLocalFolderUpload(MediaKind.PRINT_3MF, "3mf", "raw", "authenticated", "product-media/print-files");
+    }
+
+    private void assertLocalFolderUpload(MediaKind kind, String format, String resourceType,
+                                         String deliveryType, String assetFolder) throws Exception {
+        reset(uploader);
+        MediaUploadIntent intent = intent(kind);
+        ValidatedMedia media = validated(kind, format, new byte[]{1, 2, 3});
+        when(uploader.upload(any(InputStream.class), any(Map.class))).thenReturn(providerResponse(intent,
+                resourceType, deliveryType, format, 3L, secureUrl(intent, resourceType, deliveryType, format)));
+
+        MediaUploadResult result = storage.upload(intent, media);
+
+        var options = uploadOptions();
+        assertThat(options).containsEntry("asset_folder", assetFolder)
+                .containsEntry("public_id", intent.publicId())
+                .containsEntry("resource_type", resourceType)
+                .containsEntry("type", deliveryType)
+                .doesNotContainKey("folder");
+        assertThat(result.publicId()).isEqualTo(intent.publicId());
+        assertThat(result.deliveryType()).isEqualTo(deliveryType);
         verify(uploader).upload(any(InputStream.class), eq(options));
     }
 

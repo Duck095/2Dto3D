@@ -40,4 +40,5 @@ fi
 
 cd "$backend_dir"
 exec bash ./mvnw spring-boot:run \
-    "-Dspring-boot.run.arguments=--server.port=$BACKEND_PORT --spring.profiles.active=local --spring.flyway.enabled=false --spring.jpa.hibernate.ddl-auto=validate"
+    "-Dspring-boot.run.arguments=--server.port=$BACKEND_PORT --spring.profiles.active=local --spring.flyway.enabled=false --spring.jpa.hibernate.ddl-auto=validate" \
+    "-Dspring-boot.run.jvmArguments=-Duser.timezone=Asia/Ho_Chi_Minh"
