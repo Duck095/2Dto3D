@@ -14,6 +14,10 @@ public class ModelUrlResolver {
         if (path == null || path.isBlank())
             return "";
 
+        if (CloudinaryUrlPolicy.isLegacyPlaceholder(path)) {
+            return null;
+        }
+
         if (path.startsWith("http"))
             return path;
 

@@ -196,6 +196,37 @@ class ProductServiceImplTest {
     }
 
     @Test
+    void legacyRelativeProductImagesResolveThroughConfiguredHttpsCloudinaryImageBase() {
+        ProductServiceImpl cloudinaryService = new ProductServiceImpl(modelRepository, imageRepository, partRepository,
+                modelUrlResolver, mediaUrlResolver, structureSnapshots, meshConfigurations,
+                materialRepository, materialColorRepository,
+                "https://res.cloudinary.com/zsxcxwta/image/upload");
+        Model3d model = model(12, "Cloudinary URL chair");
+        when(modelRepository.findByIdAndSourceTypeAndStatus(12, ModelType.DESIGNER_MODEL, ModelStatus.ACTIVE))
+                .thenReturn(Optional.of(model));
+        when(imageRepository.findByModel_IdOrderByIsPrimaryDescIdAsc(12))
+                .thenReturn(List.of(image(120, model, "product-media/images/synthetic.png", true)));
+        when(partRepository.findByModel_IdOrderByIdAsc(12)).thenReturn(List.of());
+
+        ProductDetailResponse response = cloudinaryService.getProduct(12);
+
+        assertThat(response.images()).extracting(imageResponse -> imageResponse.url()).containsExactly(
+                "https://res.cloudinary.com/zsxcxwta/image/upload/product-media/images/synthetic.png");
+    }
+
+    @Test
+    void productImagesDoNotReturnLegacyFakeCloudinaryEndpoint() {
+        Model3d model = model(13, "Fake URL chair");
+        when(modelRepository.findByIdAndSourceTypeAndStatus(13, ModelType.DESIGNER_MODEL, ModelStatus.ACTIVE))
+                .thenReturn(Optional.of(model));
+        when(imageRepository.findByModel_IdOrderByIsPrimaryDescIdAsc(13)).thenReturn(List.of(
+                image(130, model, "http://localhost.invalid/cloudinary/products/legacy.png", true)));
+        when(partRepository.findByModel_IdOrderByIdAsc(13)).thenReturn(List.of());
+
+        assertThat(productService.getProduct(13).images().get(0).url()).isNull();
+    }
+
+    @Test
     void catalogUsesTrustedAssetUrlsForNewImageAndGlbMedia() {
         Model3d model = model(9, "New media chair");
         MediaAsset modelAsset = mediaAsset(900L, MediaKind.MODEL_3D, "glb", "raw");

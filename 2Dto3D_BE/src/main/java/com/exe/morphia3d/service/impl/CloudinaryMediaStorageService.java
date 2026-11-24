@@ -36,6 +36,7 @@ public class CloudinaryMediaStorageService implements MediaStorageService {
 
     public enum FolderPolicy {
         DEFAULT,
+        LOCAL_PRODUCT_MEDIA,
         QA_DYNAMIC_PRODUCT_MEDIA
     }
 
@@ -136,7 +137,8 @@ public class CloudinaryMediaStorageService implements MediaStorageService {
                 "connect_timeout", properties.getConnectTimeoutMillis(),
                 "connection_request_timeout", properties.getConnectionRequestTimeoutMillis(),
                 "timeout", properties.getRequestTimeoutMillis());
-        if (folderPolicy == FolderPolicy.QA_DYNAMIC_PRODUCT_MEDIA) {
+        if (folderPolicy == FolderPolicy.LOCAL_PRODUCT_MEDIA
+                || folderPolicy == FolderPolicy.QA_DYNAMIC_PRODUCT_MEDIA) {
             String assetFolder = switch (intent.mediaKind()) {
                 case IMAGE -> "product-media/images";
                 case MODEL_3D -> "product-media/models";
