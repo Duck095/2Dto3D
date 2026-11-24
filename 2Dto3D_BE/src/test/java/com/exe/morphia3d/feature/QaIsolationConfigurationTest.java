@@ -7,7 +7,6 @@ import com.exe.morphia3d.config.MomoConfig;
 import com.exe.morphia3d.config.VnPayConfig;
 import com.exe.morphia3d.service.MediaAssetReconciler;
 import com.exe.morphia3d.service.impl.CloudinaryMediaStorageService;
-import com.exe.morphia3d.service.impl.CloudinaryServiceImpl;
 import com.exe.morphia3d.service.impl.QaDisabledMediaStorageService;
 import com.exe.morphia3d.service.payment.MomoService;
 import com.exe.morphia3d.service.payment.VnPayService;
@@ -123,6 +122,13 @@ class QaIsolationConfigurationTest {
         assertThat(reconciler).isNotNull();
         assertThat(reconciler.havingValue()).isEqualTo("true");
         assertThat(reconciler.matchIfMissing()).isTrue();
+    }
+
+    @Test
+    void legacyCloudinaryUploadServiceIsNotPackaged() {
+        assertThat(new ClassPathResource("com/exe/morphia3d/service/CloudinaryService.class").exists()).isFalse();
+        assertThat(new ClassPathResource("com/exe/morphia3d/service/impl/CloudinaryServiceImpl.class").exists())
+                .isFalse();
     }
 
     @Test
