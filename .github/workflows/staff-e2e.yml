@@ -235,7 +235,11 @@ jobs:
 
       - name: Create one-time QA users and staff profile through real APIs
         working-directory: 2Dto3D_FE
-        run: node scripts/staff-e2e-qa-bootstrap.mjs
+        run: |
+          if ! node scripts/staff-e2e-qa-bootstrap.mjs; then
+            node scripts/sanitize-staff-e2e-log.mjs "$RUNNER_TEMP/staff-e2e-backend.log"
+            exit 1
+          fi
 
       - name: Start Vite with the sibling Backend proxy
         working-directory: 2Dto3D_FE
