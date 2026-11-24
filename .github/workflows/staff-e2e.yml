@@ -187,6 +187,8 @@ jobs:
         working-directory: 2Dto3D_BE
         env:
           SPRING_PROFILES_ACTIVE: local
+          DB_USERNAME: app_runtime
+          DB_PASSWORD: ${{ env.RUNTIME_PASSWORD }}
           VNPAY_CODE: E2E_NOT_USED
           VNPAY_SECRET: E2E_NOT_USED
           MOMO_PARTNER_CODE: E2E_NOT_USED
